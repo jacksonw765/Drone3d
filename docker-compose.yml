@@ -25,7 +25,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 10G
+          memory: ${NODEODM_MEMORY_LIMIT:-20G}
         reservations:
           memory: 2G
     tmpfs:

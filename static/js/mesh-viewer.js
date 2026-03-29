@@ -181,13 +181,26 @@ import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
                     });
                 }
 
-                // Center and scale the model
+                // Correct orientation from Z-up (photogrammetry) to Y-up (Three.js)
+                // Bake the rotation into each mesh geometry so bounding-box
+                // and centering calculations work in the final coordinate space.
+                const rotMatrix = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
+                object.traverse((child) => {
+                    if (child.isMesh && child.geometry) {
+                        child.geometry.applyMatrix4(rotMatrix);
+                    }
+                });
+                // Reset any lingering transform on the container
+                object.rotation.set(0, 0, 0);
+                object.updateMatrixWorld(true);
+
+                // Center the model at the origin
                 const box = new THREE.Box3().setFromObject(object);
                 const center = box.getCenter(new THREE.Vector3());
                 const size = box.getSize(new THREE.Vector3());
                 const maxDim = Math.max(size.x, size.y, size.z);
 
-                object.position.sub(center);
+                object.position.set(-center.x, -center.y, -center.z);
                 meshObject = object;
                 scene.add(meshObject);
 
