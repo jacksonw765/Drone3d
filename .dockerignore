@@ -1,0 +1,16 @@
+.git
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.eggs
+dist
+build
+media/uploads/*
+media/outputs/*
+node_modules
+.env
+.vscode
+.idea
+*.md
+!requirements.txt

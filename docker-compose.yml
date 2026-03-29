@@ -1,0 +1,96 @@
+services:
+  # ── Redis Message Broker ──────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── NodeODM Photogrammetry Engine ─────────────────────────
+  nodeodm:
+    image: opendronemap/nodeodm:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - nodeodm_data:/var/www/data
+    command: ["node", "index.js", "--max_concurrency", "1", "--cleanup_tasks_after", "2880"]
+    deploy:
+      resources:
+        limits:
+          memory: 10G
+        reservations:
+          memory: 2G
+    tmpfs:
+      - /tmp:size=2G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/info"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ── Django Web Application ────────────────────────────────
+  web:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - media_data:/app/media
+      - static_data:/app/staticfiles
+      - db_data:/app/data
+    env_file:
+      - .env
+    environment:
+      - SERVICE_TYPE=web
+      - REDIS_URL=redis://redis:6379/0
+      - NODEODM_HOST=nodeodm
+      - NODEODM_PORT=3000
+    depends_on:
+      redis:
+        condition: service_healthy
+      nodeodm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  # ── Celery Worker ─────────────────────────────────────────
+  worker:
+    build: .
+    restart: unless-stopped
+    volumes:
+      - media_data:/app/media
+      - db_data:/app/data
+    env_file:
+      - .env
+    environment:
+      - SERVICE_TYPE=worker
+      - REDIS_URL=redis://redis:6379/0
+      - NODEODM_HOST=nodeodm
+      - NODEODM_PORT=3000
+    depends_on:
+      redis:
+        condition: service_healthy
+      nodeodm:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+
+volumes:
+  redis_data:
+  nodeodm_data:
+  media_data:
+  static_data:
+  db_data:

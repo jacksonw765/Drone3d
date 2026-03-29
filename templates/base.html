@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Drone3D — Tactical Geospatial Reconstruction Platform. Convert drone footage into interactive 3D models.">
+    <title>{% block title %}Drone3D{% endblock %}</title>
+
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/main.css' %}">
+    {% block extra_css %}{% endblock %}
+
+    <!-- Preconnect for Google Fonts (only for development, vendored in production) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+</head>
+<body>
+    {% block nav %}
+    <nav class="nav" id="main-nav">
+        <a href="/" class="nav-brand">
+            <div class="nav-brand-icon">◈</div>
+            <div>
+                <div class="nav-brand-text">DRONE3D</div>
+                <div class="nav-brand-tag">Geospatial Recon</div>
+            </div>
+        </a>
+        <div class="nav-actions">
+            {% if user.is_authenticated %}
+            <div class="nav-user">
+                <span>⬡</span>
+                <span>{{ user.username }}</span>
+            </div>
+            <a href="{% url 'processing:logout' %}" class="btn btn-ghost btn-sm">Logout</a>
+            {% endif %}
+        </div>
+    </nav>
+    {% endblock %}
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Toast notification container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script>
+        /* ── Toast System ─────────────────────────────── */
+        function showToast(message, type = 'info', duration = 4000) {
+            const container = document.getElementById('toast-container');
+            const icons = { success: '✓', error: '✕', warning: '⚠', info: 'ⓘ' };
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.innerHTML = `
+                <span class="toast-icon">${icons[type] || icons.info}</span>
+                <span class="toast-message">${message}</span>
+                <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.add('toast-exit');
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+
+        /* ── CSRF Helper ──────────────────────────────── */
+        function getCsrfToken() {
+            const cookie = document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='));
+            return cookie ? cookie.split('=')[1] : '';
+        }
+
+        /* ── Fetch Helper ─────────────────────────────── */
+        async function apiFetch(url, options = {}) {
+            const defaults = {
+                headers: {
+                    'X-CSRFToken': getCsrfToken(),
+                    'Content-Type': 'application/json',
+                },
+            };
+            const merged = { ...defaults, ...options };
+            if (options.headers) {
+                merged.headers = { ...defaults.headers, ...options.headers };
+            }
+            const response = await fetch(url, merged);
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+                throw new Error(data.error || `Request failed (${response.status})`);
+            }
+            return response.json();
+        }
+
+        /* ── Format Helpers ───────────────────────────── */
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        function formatDate(isoStr) {
+            if (!isoStr) return '—';
+            const d = new Date(isoStr);
+            return d.toLocaleDateString('en-US', {
+                month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit',
+            });
+        }
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

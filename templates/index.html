@@ -1,0 +1,434 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Drone3D — Mission Dashboard{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Page Header -->
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">Mission Dashboard</h1>
+            <p class="page-subtitle">Upload drone footage and generate 3D geospatial reconstructions</p>
+        </div>
+        <button class="btn btn-primary btn-lg" id="btn-new-project" onclick="openNewProjectModal()">
+            <span>+</span> New Project
+        </button>
+    </div>
+
+    <!-- Project Grid -->
+    <div class="project-grid" id="project-grid">
+        {% for project in projects %}
+        <div class="card project-card" data-status="{{ project.status }}" data-id="{{ project.id }}" id="project-{{ project.id }}">
+            <div class="card-body">
+                <div style="display:flex; align-items:center; justify-content:space-between;">
+                    <h3 class="project-name">{{ project.name }}</h3>
+                    <span class="badge badge-{{ project.status }}">
+                        <span class="badge-dot"></span>
+                        {{ project.get_status_display }}
+                    </span>
+                </div>
+
+                {% if project.status == 'processing' or project.status == 'preprocessing' or project.status == 'queued' %}
+                <div class="progress-bar">
+                    <div class="progress-bar-fill" style="width: {{ project.progress }}%"></div>
+                </div>
+                <div class="progress-text">{{ project.progress|floatformat:1 }}%</div>
+                {% endif %}
+
+                {% if project.error_message %}
+                <div class="error-detail" style="
+                    margin-top: 10px;
+                    padding: 10px 12px;
+                    background: rgba(248,113,113,0.08);
+                    border: 1px solid rgba(248,113,113,0.25);
+                    border-radius: 8px;
+                    font-size: 0.82rem;
+                ">
+                    <p style="color:#fca5a5;margin:0 0 4px 0;font-weight:600;">⚠️ Processing Failed</p>
+                    <p style="color:#e5e7eb;margin:0 0 4px 0;" class="error-summary-text">{{ project.error_message|truncatewords:30 }}</p>
+                    <p style="color:#9ca3af;margin:0;font-size:0.78rem;" class="error-suggestion-text"></p>
+                </div>
+                <script>
+                    (function() {
+                        try {
+                            const raw = {{ project.error_message|safe }};
+                            const card = document.getElementById('project-{{ project.id }}');
+                            if (card && raw && raw.summary) {
+                                const s = card.querySelector('.error-summary-text');
+                                const t = card.querySelector('.error-suggestion-text');
+                                if (s) s.textContent = raw.summary;
+                                if (t) t.textContent = '💡 ' + (raw.suggestion || '');
+                            }
+                        } catch(e) {}
+                    })();
+                </script>
+                {% endif %}
+
+                <div class="project-meta">
+                    <span class="project-meta-item">
+                        📅 {{ project.created_at|date:"M d, H:i" }}
+                    </span>
+                    <span class="project-meta-item">
+                        📊 {{ project.get_quality_preset_display }}
+                    </span>
+                    <span class="project-meta-item">
+                        {{ project.get_input_type_display }}
+                    </span>
+                </div>
+            </div>
+            <div class="card-footer">
+                {% if project.status == 'uploading' %}
+                <button class="btn btn-secondary btn-sm" onclick="openUploadPanel('{{ project.id }}')">
+                    📤 Upload Files
+                </button>
+                <button class="btn btn-primary btn-sm" onclick="startProcessing('{{ project.id }}')" id="btn-process-{{ project.id }}">
+                    ▶ Process
+                </button>
+                {% elif project.status == 'completed' %}
+                <a href="/viewer/{{ project.id }}/" class="btn btn-primary btn-sm">
+                    🌐 View 3D Model
+                </a>
+                <button class="btn btn-danger btn-sm" onclick="deleteProject('{{ project.id }}', '{{ project.name }}')">
+                    🗑
+                </button>
+                {% elif project.status == 'failed' %}
+                <button class="btn btn-secondary btn-sm" onclick="openUploadPanel('{{ project.id }}')">
+                    📤 Upload More
+                </button>
+                <button class="btn btn-primary btn-sm" onclick="startProcessing('{{ project.id }}')" id="btn-process-{{ project.id }}">
+                    ▶ Retry Process
+                </button>
+                <button class="btn btn-danger btn-sm" onclick="deleteProject('{{ project.id }}', '{{ project.name }}')">
+                    🗑
+                </button>
+                {% else %}
+                <span class="text-sm text-secondary">Processing...</span>
+                <span></span>
+                {% endif %}
+            </div>
+        </div>
+        {% empty %}
+        <div class="empty-state" style="grid-column: 1 / -1;">
+            <div class="empty-state-icon">🛸</div>
+            <h2 class="empty-state-title">No Projects Yet</h2>
+            <p class="empty-state-desc">
+                Create your first project to start converting drone footage
+                into interactive 3D geospatial models.
+            </p>
+            <button class="btn btn-primary btn-lg" onclick="openNewProjectModal()">
+                <span>+</span> Create First Project
+            </button>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     New Project Modal
+     ═══════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="new-project-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 class="modal-title">New Reconstruction Project</h2>
+            <button class="modal-close" onclick="closeNewProjectModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label" for="project-name">Project Name</label>
+                <input type="text" class="form-input" id="project-name"
+                    placeholder="e.g. FOB Alpha Survey, Route Clearance 03-29">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Quality Preset</label>
+                <div class="quality-grid">
+                    <div class="quality-option">
+                        <input type="radio" name="quality" id="q-low" value="low">
+                        <label for="q-low">
+                            <span class="quality-label">Low</span>
+                            <span class="quality-desc">Fast • ~4GB RAM</span>
+                        </label>
+                    </div>
+                    <div class="quality-option">
+                        <input type="radio" name="quality" id="q-medium" value="medium" checked>
+                        <label for="q-medium">
+                            <span class="quality-label">Medium</span>
+                            <span class="quality-desc">Balanced • ~8GB RAM</span>
+                        </label>
+                    </div>
+                    <div class="quality-option">
+                        <input type="radio" name="quality" id="q-high" value="high">
+                        <label for="q-high">
+                            <span class="quality-label">High</span>
+                            <span class="quality-desc">Detailed • ~12GB RAM</span>
+                        </label>
+                    </div>
+                    <div class="quality-option">
+                        <input type="radio" name="quality" id="q-ultra" value="ultra">
+                        <label for="q-ultra">
+                            <span class="quality-label">Ultra</span>
+                            <span class="quality-desc">Max Detail • 16GB+ RAM</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="approx-location-toggle">
+                    Approximate Location <span style="font-weight:400;color:var(--text-tertiary);text-transform:none;letter-spacing:0;">(optional)</span>
+                </label>
+                <p style="font-size:0.78rem;color:var(--text-tertiary);margin-bottom:10px;">
+                    If your images don't have GPS metadata, you can provide an approximate location
+                    to enable georeferenced outputs (orthophoto, elevation maps).
+                </p>
+                <label class="location-toggle" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.85rem;color:var(--text-secondary);">
+                    <input type="checkbox" id="approx-location-toggle" style="accent-color:var(--accent-primary);">
+                    Set approximate coordinates
+                </label>
+                <div id="approx-location-fields" style="display:none;margin-top:12px;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        <div>
+                            <label class="form-label" for="approx-lat" style="font-size:0.75rem;margin-bottom:4px;">Latitude</label>
+                            <input type="number" class="form-input" id="approx-lat"
+                                placeholder="e.g. 35.1234" step="any" min="-90" max="90">
+                        </div>
+                        <div>
+                            <label class="form-label" for="approx-lon" style="font-size:0.75rem;margin-bottom:4px;">Longitude</label>
+                            <input type="number" class="form-input" id="approx-lon"
+                                placeholder="e.g. -106.5678" step="any" min="-180" max="180">
+                        </div>
+                    </div>
+                    <p style="font-size:0.72rem;color:var(--text-tertiary);margin-top:6px;">
+                        💡 Tip: Right-click on Google Maps and select "Copy coordinates" to get lat/lon.
+                    </p>
+                </div>
+            </div>
+
+            <!-- ═══ Advanced Configuration ═══ -->
+            <div class="advanced-config">
+                <button type="button" class="advanced-toggle" id="advanced-toggle" onclick="toggleAdvancedConfig()">
+                    <span class="advanced-toggle-icon" id="advanced-toggle-icon">▶</span>
+                    <span>Advanced Configuration</span>
+                    <span class="advanced-toggle-hint">Fine-tune processing parameters</span>
+                </button>
+                <div class="advanced-body" id="advanced-body">
+                    <p class="advanced-note">
+                        ⚙️ These override the quality preset defaults. Leave blank to use preset values.
+                    </p>
+
+                    <!-- Feature Matching -->
+                    <div class="advanced-section">
+                        <div class="advanced-section-header">
+                            <span class="advanced-section-icon">🔍</span>
+                            <span>Feature Matching</span>
+                        </div>
+                        <div class="advanced-grid">
+                            <div class="advanced-field">
+                                <label class="advanced-label" for="adv-feature-quality">
+                                    Feature Quality
+                                    <span class="advanced-tip" title="Higher quality extracts more keypoints per image. Critical for video input and scenes with repetitive textures.">?</span>
+                                </label>
+                                <select class="form-input form-select" id="adv-feature-quality">
+                                    <option value="">Preset default</option>
+                                    <option value="lowest">Lowest</option>
+                                    <option value="low">Low</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="high">High</option>
+                                    <option value="ultra">Ultra</option>
+                                </select>
+                            </div>
+                            <div class="advanced-field">
+                                <label class="advanced-label" for="adv-matcher-type">
+                                    Matcher Type
+                                    <span class="advanced-tip" title="'flann' is default and stable. 'bow' is faster for video. 'bruteforce' is slowest but most robust.">?</span>
+                                </label>
+                                <select class="form-input form-select" id="adv-matcher-type">
+                                    <option value="">Preset default</option>
+                                    <option value="flann">FLANN (balanced)</option>
+                                    <option value="bow">BoW (fast, good for video)</option>
+                                    <option value="bruteforce">Brute Force (slow, robust)</option>
+                                </select>
+                            </div>
+                            <div class="advanced-field">
+                                <label class="advanced-label" for="adv-min-num-features">
+                                    Min Features
+                                    <span class="advanced-tip" title="Minimum keypoints extracted per image. Default: 10000. Increase for featureless areas or high-overlap video frames.">?</span>
+                                </label>
+                                <input type="number" class="form-input" id="adv-min-num-features"
+                                    placeholder="10000" min="2000" max="100000" step="1000">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Point Cloud -->
+                    <div class="advanced-section">
+                        <div class="advanced-section-header">
+                            <span class="advanced-section-icon">☁️</span>
+                            <span>Point Cloud & Depth</span>
+                        </div>
+                        <div class="advanced-grid">
+                            <div class="advanced-field">
+                                <label class="advanced-label" for="adv-pc-quality">
+                                    Point Cloud Quality
+                                    <span class="advanced-tip" title="Density of the reconstructed point cloud. Higher = more detailed but slower & more RAM.">?</span>
+                                </label>
+                                <select class="form-input form-select" id="adv-pc-quality">
+                                    <option value="">Preset default</option>
+                                    <option value="lowest">Lowest</option>
+                                    <option value="low">Low</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="high">High</option>
+                                    <option value="ultra">Ultra</option>
+                                </select>
+                            </div>
+                            <div class="advanced-field">
+                                <label class="advanced-label" for="adv-depthmap-resolution">
+                                    Depthmap Resolution
+                                    <span class="advanced-tip" title="Resolution of depth maps in px. Higher = more detail but more RAM. Default varies by preset (640–1920).">?</span>
+                                </label>
+                                <input type="number" class="form-input" id="adv-depthmap-resolution"
+                                    placeholder="Preset default" min="320" max="4096" step="64">
+                            </div>
+                            <div class="advanced-field">
+                                <label class="advanced-label" for="adv-resize-to">
+                                    Resize Images To
+                                    <span class="advanced-tip" title="Downscale input images to this max dimension (px). Lower = faster, higher = more detail. Use -1 for no resize.">?</span>
+                                </label>
+                                <input type="number" class="form-input" id="adv-resize-to"
+                                    placeholder="Preset default" min="-1" max="8192" step="256">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mesh & Texturing -->
+                    <div class="advanced-section">
+                        <div class="advanced-section-header">
+                            <span class="advanced-section-icon">🔺</span>
+                            <span>Mesh & Texturing</span>
+                        </div>
+                        <div class="advanced-grid">
+                            <div class="advanced-field">
+                                <label class="advanced-label" for="adv-mesh-octree-depth">
+                                    Mesh Octree Depth
+                                    <span class="advanced-tip" title="Controls mesh detail level. 8=coarse, 10=detailed, 12=very detailed. Each +1 roughly doubles vertex count.">?</span>
+                                </label>
+                                <input type="number" class="form-input" id="adv-mesh-octree-depth"
+                                    placeholder="Preset default" min="6" max="14" step="1">
+                            </div>
+                            <div class="advanced-field">
+                                <label class="advanced-label" for="adv-use-3dmesh">
+                                    3D Mesh
+                                    <span class="advanced-tip" title="Generate a full 3D mesh instead of a 2.5D surface. Essential for objects and buildings.">?</span>
+                                </label>
+                                <select class="form-input form-select" id="adv-use-3dmesh">
+                                    <option value="">Preset default</option>
+                                    <option value="true">Enabled (3D mesh)</option>
+                                    <option value="false">Disabled (2.5D surface)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Outputs -->
+                    <div class="advanced-section">
+                        <div class="advanced-section-header">
+                            <span class="advanced-section-icon">📦</span>
+                            <span>Outputs</span>
+                        </div>
+                        <div class="advanced-grid">
+                            <div class="advanced-field">
+                                <label class="advanced-label" for="adv-orthophoto-resolution">
+                                    Orthophoto Resolution
+                                    <span class="advanced-tip" title="Ground resolution in cm/px. Lower = sharper but larger files. Default varies by preset (3–10).">?</span>
+                                </label>
+                                <input type="number" class="form-input" id="adv-orthophoto-resolution"
+                                    placeholder="Preset default" min="1" max="100" step="1">
+                            </div>
+                            <div class="advanced-field">
+                                <label class="advanced-label" for="adv-dsm">
+                                    DSM (Digital Surface Model)
+                                    <span class="advanced-tip" title="Generate a Digital Surface Model including buildings and vegetation height.">?</span>
+                                </label>
+                                <select class="form-input form-select" id="adv-dsm">
+                                    <option value="">Preset default</option>
+                                    <option value="true">Generate</option>
+                                    <option value="false">Skip</option>
+                                </select>
+                            </div>
+                            <div class="advanced-field">
+                                <label class="advanced-label" for="adv-dtm">
+                                    DTM (Digital Terrain Model)
+                                    <span class="advanced-tip" title="Generate a bare-earth terrain model with vegetation removed.">?</span>
+                                </label>
+                                <select class="form-input form-select" id="adv-dtm">
+                                    <option value="">Preset default</option>
+                                    <option value="true">Generate</option>
+                                    <option value="false">Skip</option>
+                                </select>
+                            </div>
+                            <div class="advanced-field">
+                                <label class="advanced-label" for="adv-skip-orthophoto">
+                                    Skip Orthophoto
+                                    <span class="advanced-tip" title="Skip orthophoto generation to speed up processing. Useful when you only need 3D model output.">?</span>
+                                </label>
+                                <select class="form-input form-select" id="adv-skip-orthophoto">
+                                    <option value="">No (generate orthophoto)</option>
+                                    <option value="true">Yes (skip orthophoto)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeNewProjectModal()">Cancel</button>
+            <button class="btn btn-primary" id="btn-create-project" onclick="createProject()">
+                Create Project
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     Upload Panel Modal
+     ═══════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="upload-modal">
+    <div class="modal" style="max-width: 640px;">
+        <div class="modal-header">
+            <h2 class="modal-title">Upload Files</h2>
+            <button class="modal-close" onclick="closeUploadPanel()">×</button>
+        </div>
+        <div class="modal-body">
+            <!-- Drop zone -->
+            <div class="upload-zone" id="upload-zone">
+                <div class="upload-zone-icon">📡</div>
+                <div class="upload-zone-title">Drop drone files here</div>
+                <div class="upload-zone-subtitle">or click to browse</div>
+                <div class="upload-zone-formats">
+                    <span class="format-tag">JPG</span>
+                    <span class="format-tag">TIFF</span>
+                    <span class="format-tag">PNG</span>
+                    <span class="format-tag">DNG</span>
+                    <span class="format-tag">MP4</span>
+                    <span class="format-tag">MOV</span>
+                    <span class="format-tag">SRT</span>
+                </div>
+                <input type="file" id="file-input" multiple hidden
+                    accept=".jpg,.jpeg,.tif,.tiff,.png,.dng,.mp4,.mov,.lrv,.ts,.srt">
+            </div>
+
+            <!-- File list -->
+            <div class="file-list" id="file-list"></div>
+        </div>
+        <div class="modal-footer">
+            <div class="text-sm text-secondary" id="upload-summary"></div>
+            <div style="display:flex; gap:8px;">
+                <button class="btn btn-secondary" onclick="closeUploadPanel()">Done</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{% static 'js/upload.js' %}"></script>
+<script src="{% static 'js/dashboard.js' %}"></script>
+{% endblock %}

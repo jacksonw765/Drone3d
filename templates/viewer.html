@@ -1,0 +1,353 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Drone3D — {{ project.name }} Viewer{% endblock %}
+
+{% block extra_css %}
+<!-- Potree CSS (vendored) -->
+<link rel="stylesheet" href="{% static 'potree/build/potree.css' %}">
+<style>
+    /* Override Potree defaults for our theme */
+    #potree_render_area {
+        position: absolute;
+        inset: 0;
+        background: #000;
+    }
+    .potree_container {
+        position: absolute;
+        inset: 0;
+    }
+    .viewer-no-data {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        text-align: center;
+        padding: 40px;
+    }
+    .viewer-no-data-icon {
+        font-size: 4rem;
+        margin-bottom: 20px;
+        opacity: 0.5;
+    }
+    .viewer-no-data h2 {
+        font-size: 1.5rem;
+        margin-bottom: 12px;
+    }
+    .viewer-no-data p {
+        color: var(--text-secondary);
+        margin-bottom: 24px;
+        max-width: 500px;
+    }
+    .viewer-downloads-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 12px;
+        width: 100%;
+        max-width: 600px;
+    }
+    .viewer-download-card {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        text-decoration: none;
+        transition: all var(--transition-normal);
+    }
+    .viewer-download-card:hover {
+        border-color: var(--accent-primary);
+        box-shadow: var(--shadow-glow);
+        transform: translateY(-2px);
+    }
+    .viewer-download-card .dl-icon {
+        font-size: 1.5rem;
+    }
+    .viewer-download-card .dl-label {
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+    .viewer-download-card .dl-type {
+        font-size: 0.75rem;
+        color: var(--text-tertiary);
+    }
+</style>
+{% endblock %}
+
+{% block nav %}
+<!-- Minimal nav for viewer -->
+<div class="viewer-toolbar" id="viewer-toolbar">
+    <a href="/" class="viewer-toolbar-btn" title="Back to Dashboard">←</a>
+    <div class="viewer-toolbar-divider"></div>
+    <span class="viewer-title">{{ project.name }}</span>
+    <span id="mesh-info" style="display:none;font-size:0.75rem;color:var(--text-tertiary);margin-left:8px;"></span>
+    <div class="viewer-toolbar-divider"></div>
+
+    {% if has_potree %}
+    <button class="viewer-toolbar-btn active" id="btn-toggle-pointcloud" title="Point Cloud" onclick="toggleLayer('pointcloud')">
+        ⬡
+    </button>
+    {% endif %}
+    {% if has_mesh and not has_potree %}
+    <button class="viewer-toolbar-btn" id="btn-wireframe" title="Toggle Wireframe [W]" onclick="toggleWireframe()">
+        ◇
+    </button>
+    <button class="viewer-toolbar-btn" id="btn-reset-camera" title="Reset Camera [R]" onclick="resetCamera()">
+        ⟲
+    </button>
+    {% endif %}
+    {% if has_orthophoto %}
+    <button class="viewer-toolbar-btn" id="btn-toggle-ortho" title="Orthophoto" onclick="toggleLayer('orthophoto')">
+        ▣
+    </button>
+    {% endif %}
+
+    <div class="viewer-toolbar-divider"></div>
+
+    {% if has_potree %}
+    <button class="viewer-toolbar-btn" id="btn-measure-distance" title="Measure Distance" onclick="activateMeasure('distance')">
+        📏
+    </button>
+    <button class="viewer-toolbar-btn" id="btn-measure-area" title="Measure Area" onclick="activateMeasure('area')">
+        ⬠
+    </button>
+    <div class="viewer-toolbar-divider"></div>
+    {% endif %}
+
+    <button class="viewer-toolbar-btn" id="btn-toggle-panel" title="Settings Panel" onclick="togglePanel()">
+        ☰
+    </button>
+    <button class="viewer-toolbar-btn" id="btn-fullscreen" title="Fullscreen" onclick="toggleFullscreen()">
+        ⛶
+    </button>
+</div>
+{% endblock %}
+
+{% block content %}
+{% if error %}
+<!-- Error State -->
+<div class="viewer-error">
+    <div class="viewer-error-content">
+        <div class="viewer-error-icon">⚠</div>
+        <h2 class="viewer-error-title">Project Not Ready</h2>
+        <p class="viewer-error-desc">{{ error }}</p>
+        <a href="/" class="btn btn-primary">Back to Dashboard</a>
+    </div>
+</div>
+{% elif has_potree %}
+<!-- 3D Viewer Container (Potree) -->
+<div class="viewer-container" id="viewer-container">
+    <div id="potree_render_area"></div>
+</div>
+{% elif has_mesh %}
+<!-- 3D Viewer Container (Three.js Mesh) -->
+<div class="viewer-container" id="viewer-container">
+    <div id="threejs-render-area" style="position:absolute;inset:0;background:#0a0e1a;"></div>
+</div>
+{% else %}
+<!-- No viewable data -->
+<div class="viewer-container" id="viewer-container">
+    <div class="viewer-no-data">
+        <div class="viewer-no-data-icon">📦</div>
+        <h2>No Viewable Output</h2>
+        <p>The reconstruction completed but no mesh or point cloud was produced. Check the processing logs.</p>
+        <a href="/" class="btn btn-secondary">← Back to Dashboard</a>
+    </div>
+</div>
+{% endif %}
+
+<!-- Side Panel -->
+<div class="viewer-panel" id="viewer-panel">
+    <!-- Layers Section -->
+    <div class="panel-section">
+        <div class="panel-section-title">Layers</div>
+
+        {% if has_potree %}
+        <div class="layer-toggle">
+            <div class="layer-label">
+                <div class="layer-icon" style="background: rgba(0,230,138,0.15); color: var(--accent-primary);">⬡</div>
+                Point Cloud
+            </div>
+            <label class="toggle-switch">
+                <input type="checkbox" id="toggle-pointcloud" checked onchange="toggleLayer('pointcloud')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        {% endif %}
+
+        {% if has_mesh %}
+        <div class="layer-toggle">
+            <div class="layer-label">
+                <div class="layer-icon" style="background: rgba(168,85,247,0.15); color: #c084fc;">△</div>
+                3D Mesh
+            </div>
+            <label class="toggle-switch">
+                <input type="checkbox" id="toggle-mesh" onchange="toggleLayer('mesh')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        {% endif %}
+
+        {% if has_orthophoto %}
+        <div class="layer-toggle">
+            <div class="layer-label">
+                <div class="layer-icon" style="background: rgba(59,130,246,0.15); color: #60a5fa;">▣</div>
+                Orthophoto
+            </div>
+            <label class="toggle-switch">
+                <input type="checkbox" id="toggle-orthophoto" onchange="toggleLayer('orthophoto')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if has_potree %}
+    <!-- Point Cloud Styling -->
+    <div class="panel-section">
+        <div class="panel-section-title">Point Cloud Style</div>
+
+        <div class="range-control">
+            <div class="range-header">
+                <span class="range-label">Point Size</span>
+                <span class="range-value" id="val-point-size">1.0</span>
+            </div>
+            <input type="range" class="range-slider" id="slider-point-size"
+                min="0.1" max="5" step="0.1" value="1.0"
+                oninput="updatePointSize(this.value)">
+        </div>
+
+        <div class="range-control">
+            <div class="range-header">
+                <span class="range-label">Point Budget</span>
+                <span class="range-value" id="val-point-budget">1M</span>
+            </div>
+            <input type="range" class="range-slider" id="slider-point-budget"
+                min="100000" max="10000000" step="100000" value="1000000"
+                oninput="updatePointBudget(this.value)">
+        </div>
+
+        <div class="form-group mt-1">
+            <label class="form-label">Color Mode</label>
+            <select class="form-input form-select" id="select-color-mode" onchange="updateColorMode(this.value)">
+                <option value="rgb">RGB (Natural)</option>
+                <option value="elevation">Elevation</option>
+                <option value="intensity">Intensity</option>
+                <option value="classification">Classification</option>
+            </select>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Downloads -->
+    <div class="panel-section">
+        <div class="panel-section-title">Downloads</div>
+        <div class="download-list">
+            {% if has_orthophoto %}
+            <a href="/viewer/{{ project.id }}/download/orthophoto/" class="download-item">
+                <span class="download-icon">🗺</span>
+                Orthophoto (.tif)
+            </a>
+            {% endif %}
+            {% if has_pointcloud %}
+            <a href="/viewer/{{ project.id }}/download/pointcloud/" class="download-item">
+                <span class="download-icon">☁</span>
+                Point Cloud (.laz)
+            </a>
+            {% endif %}
+            {% if has_mesh %}
+            <a href="/viewer/{{ project.id }}/download/mesh/" class="download-item">
+                <span class="download-icon">△</span>
+                3D Mesh (.obj)
+            </a>
+            {% endif %}
+            {% if has_dsm %}
+            <a href="/viewer/{{ project.id }}/download/dsm/" class="download-item">
+                <span class="download-icon">📊</span>
+                DSM (.tif)
+            </a>
+            {% endif %}
+            {% if has_dtm %}
+            <a href="/viewer/{{ project.id }}/download/dtm/" class="download-item">
+                <span class="download-icon">📈</span>
+                DTM (.tif)
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Project Info -->
+    <div class="panel-section">
+        <div class="panel-section-title">Project Info</div>
+        <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 2;">
+            <div><strong>Name:</strong> {{ project.name }}</div>
+            <div><strong>Quality:</strong> {{ project.get_quality_preset_display }}</div>
+            <div><strong>Input:</strong> {{ project.get_input_type_display }}</div>
+            <div><strong>Created:</strong> {{ project.created_at|date:"M d, Y H:i" }}</div>
+            {% if project.completed_at %}
+            <div><strong>Completed:</strong> {{ project.completed_at|date:"M d, Y H:i" }}</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Coordinate Display -->
+<div class="coord-display" id="coord-display">
+    <div class="coord-item">
+        <span class="coord-label">LAT</span>
+        <span class="coord-value" id="coord-lat">—</span>
+    </div>
+    <div class="coord-item">
+        <span class="coord-label">LON</span>
+        <span class="coord-value" id="coord-lon">—</span>
+    </div>
+    <div class="coord-item">
+        <span class="coord-label">ELEV</span>
+        <span class="coord-value" id="coord-elev">—</span>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+{% if not error %}
+<script>
+    window.VIEWER_CONFIG = {
+        projectId: '{{ project.id }}',
+        projectName: '{{ project.name|escapejs }}',
+        hasPotree: {% if has_potree %}true{% else %}false{% endif %},
+        hasMesh: {% if has_mesh %}true{% else %}false{% endif %},
+        hasOrthophoto: {% if has_orthophoto %}true{% else %}false{% endif %},
+        potreeDataUrl: '{{ potree_data_url }}',
+        meshDataUrl: '{{ mesh_data_url }}',
+        meshFilename: '{{ mesh_filename|default:"" }}',
+    };
+</script>
+{% if has_potree %}
+<!-- Potree dependencies -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<script src="{% static 'potree/libs/three.js/build/three.min.js' %}"></script>
+<script src="{% static 'potree/build/potree.js' %}"></script>
+<script src="{% static 'js/viewer.js' %}"></script>
+{% elif has_mesh %}
+<!-- Three.js Mesh Viewer via ES modules -->
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+    }
+}
+</script>
+<script type="module" src="{% static 'js/mesh-viewer.js' %}"></script>
+{% endif %}
+{% endif %}
+{% endblock %}
