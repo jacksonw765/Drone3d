@@ -9,7 +9,7 @@
 
     // ── Status Polling ──────────────────────────────────
     const POLL_INTERVAL = 5000;
-    const ACTIVE_STATUSES = new Set(['queued', 'preprocessing', 'processing']);
+    const ACTIVE_STATUSES = new Set(['queued', 'preprocessing', 'processing', 'analyzing']);
     let pollTimers = {};
 
     // Start polling for active projects on page load
@@ -86,27 +86,57 @@
         // Update progress bar
         let progressBar = card.querySelector('.progress-bar');
         if (ACTIVE_STATUSES.has(data.status)) {
+            const progressLabel = data.progress_message
+                ? `${data.progress}% — ${data.progress_message}`
+                : `${data.progress}%`;
+
             if (!progressBar) {
-                // Create progress bar
+                // Create clickable progress bar + message
                 const body = card.querySelector('.card-body');
                 const progressHtml = `
-                    <div class="progress-bar">
+                    <div class="progress-bar" onclick="showProcessingLogs('${projectId}')" style="cursor:pointer;" title="Click for processing details">
                         <div class="progress-bar-fill" style="width: ${data.progress}%"></div>
                     </div>
-                    <div class="progress-text">${data.progress}%</div>
+                    <div class="progress-text" style="display:flex;justify-content:space-between;align-items:center;">
+                        <span>${progressLabel}</span>
+                        <span style="font-size:0.7rem;color:var(--text-tertiary);cursor:pointer;" onclick="showProcessingLogs('${projectId}')">📋 View logs</span>
+                    </div>
                 `;
                 body.insertAdjacentHTML('beforeend', progressHtml);
             } else {
                 const fill = progressBar.querySelector('.progress-bar-fill');
                 if (fill) fill.style.width = `${data.progress}%`;
-                const text = card.querySelector('.progress-text');
-                if (text) text.textContent = `${data.progress}%`;
+                const text = card.querySelector('.progress-text span:first-child');
+                if (text) text.textContent = progressLabel;
             }
         } else {
             // Remove progress bar for completed/failed
             if (progressBar) progressBar.remove();
             const progressText = card.querySelector('.progress-text');
             if (progressText) progressText.remove();
+        }
+
+        // Update AI status info
+        let aiInfo = card.querySelector('.ai-status-info');
+        if (data.status === 'analyzing' || data.annotation_count > 0 || data.has_ai_report) {
+            if (!aiInfo) {
+                aiInfo = document.createElement('div');
+                aiInfo.className = 'ai-status-info';
+                aiInfo.style.cssText = 'margin-top:8px;display:flex;align-items:center;gap:8px;font-size:0.78rem;';
+                const body = card.querySelector('.card-body');
+                if (body) body.appendChild(aiInfo);
+            }
+            const parts = [];
+            if (data.status === 'analyzing') {
+                parts.push(`<span style="color:#818cf8">🤖 ${data.progress_message || 'AI analyzing...'}</span>`);
+            }
+            if (data.annotation_count > 0) {
+                parts.push(`<span style="color:var(--text-tertiary)">📍 ${data.annotation_count} annotations</span>`);
+            }
+            if (data.has_ai_report) {
+                parts.push(`<span style="color:#818cf8">📝 Report ready</span>`);
+            }
+            aiInfo.innerHTML = parts.join('<span style="color:var(--border-default)">|</span>');
         }
 
         // Update footer buttons
@@ -119,6 +149,15 @@
                     </a>
                     <button class="btn btn-danger btn-sm" onclick="deleteProject('${projectId}', '${data.name}')">
                         🗑
+                    </button>
+                `;
+            } else if (ACTIVE_STATUSES.has(data.status)) {
+                footer.innerHTML = `
+                    <button class="btn btn-secondary btn-sm" onclick="showProcessingLogs('${projectId}')">
+                        📋 Pipeline Status
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="cancelProcessing('${projectId}', '${data.name}')">
+                        ✕ Cancel
                     </button>
                 `;
             } else if (data.status === 'failed') {
@@ -412,14 +451,169 @@
                 const footer = card.querySelector('.card-footer');
                 if (footer) {
                     footer.innerHTML = `
-                        <span class="text-sm text-secondary">Processing...</span>
-                        <span></span>
+                        <button class="btn btn-secondary btn-sm" onclick="showProcessingLogs('${projectId}')">
+                            📋 Pipeline Status
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="cancelProcessing('${projectId}')">
+                            ✕ Cancel
+                        </button>
                     `;
                 }
             }
         } catch (err) {
             showToast(err.message, 'error');
             if (btn) btn.disabled = false;
+        }
+    };
+
+    // ── Cancel Processing ───────────────────────────────
+    window.cancelProcessing = async function (projectId, projectName) {
+        const name = projectName || 'this project';
+        if (!confirm(`Cancel processing for "${name}"? You can retry later.`)) {
+            return;
+        }
+
+        try {
+            await apiFetch(`/api/projects/${projectId}/cancel/`, {
+                method: 'POST',
+            });
+
+            showToast('Processing canceled', 'info');
+            stopPolling(projectId);
+
+            // Force a status update
+            try {
+                const data = await apiFetch(`/api/projects/${projectId}/status/`);
+                updateProjectCard(projectId, data);
+            } catch (e) {
+                // Reload if status fetch fails
+                setTimeout(() => window.location.reload(), 500);
+            }
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    };
+
+    // ── Processing Logs Modal ───────────────────────────
+    let logRefreshTimer = null;
+
+    window.showProcessingLogs = async function (projectId) {
+        // Create or reuse modal
+        let modal = document.getElementById('processing-logs-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'processing-logs-modal';
+            modal.innerHTML = `
+                <div class="logs-modal-backdrop" onclick="closeProcessingLogs()"></div>
+                <div class="logs-modal-content">
+                    <div class="logs-modal-header">
+                        <h3>⚙️ Processing Pipeline</h3>
+                        <button class="logs-modal-close" onclick="closeProcessingLogs()">✕</button>
+                    </div>
+                    <div class="logs-modal-body">
+                        <div id="pipeline-steps" class="pipeline-steps"></div>
+                        <div class="logs-section">
+                            <div class="logs-section-header">
+                                <span>📋 NodeODM Console Output</span>
+                                <label class="logs-autoscroll">
+                                    <input type="checkbox" id="logs-autoscroll-check" checked> Auto-scroll
+                                </label>
+                            </div>
+                            <pre id="logs-output" class="logs-output">Loading...</pre>
+                        </div>
+                    </div>
+                    <div class="logs-modal-footer">
+                        <button class="btn btn-secondary btn-sm" onclick="refreshLogs('${projectId}')">🔄 Refresh</button>
+                        <button class="btn btn-danger btn-sm" onclick="cancelProcessing('${projectId}'); closeProcessingLogs();">✕ Cancel Job</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        // Update the cancel button projectId reference
+        const footer = modal.querySelector('.logs-modal-footer');
+        if (footer) {
+            const cancelBtn = footer.querySelector('.btn-danger');
+            if (cancelBtn) {
+                cancelBtn.onclick = () => { cancelProcessing(projectId); closeProcessingLogs(); };
+            }
+            const refreshBtn = footer.querySelector('.btn-secondary');
+            if (refreshBtn) {
+                refreshBtn.onclick = () => refreshLogs(projectId);
+            }
+        }
+
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+
+        // Fetch and display logs
+        await refreshLogs(projectId);
+
+        // Start auto-refresh every 3 seconds
+        if (logRefreshTimer) clearInterval(logRefreshTimer);
+        logRefreshTimer = setInterval(() => refreshLogs(projectId), 3000);
+    };
+
+    window.refreshLogs = async function (projectId) {
+        try {
+            const data = await apiFetch(`/api/projects/${projectId}/logs/?lines=80`);
+
+            // Update pipeline steps
+            const stepsEl = document.getElementById('pipeline-steps');
+            if (stepsEl && data.steps) {
+                stepsEl.innerHTML = data.steps.map(step => {
+                    const icons = { done: '✅', active: '🔄', pending: '⏳' };
+                    const icon = icons[step.status] || '⏳';
+                    const activeClass = step.status === 'active' ? ' step-active' : '';
+                    const doneClass = step.status === 'done' ? ' step-done' : '';
+                    return `
+                        <div class="pipeline-step${activeClass}${doneClass}">
+                            <span class="step-icon">${icon}</span>
+                            <div class="step-info">
+                                <span class="step-name">${step.name}</span>
+                                <span class="step-detail">${step.detail}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // Update logs output
+            const logsEl = document.getElementById('logs-output');
+            if (logsEl && data.logs) {
+                if (data.logs.length === 0) {
+                    logsEl.textContent = 'No console output yet — task may still be queued.';
+                } else {
+                    logsEl.textContent = data.logs.join('\n');
+                }
+                // Auto-scroll to bottom
+                const autoScroll = document.getElementById('logs-autoscroll-check');
+                if (!autoScroll || autoScroll.checked) {
+                    logsEl.scrollTop = logsEl.scrollHeight;
+                }
+            }
+
+            // If the project is no longer processing, stop auto-refresh
+            if (data.status && !ACTIVE_STATUSES.has(data.status)) {
+                if (logRefreshTimer) {
+                    clearInterval(logRefreshTimer);
+                    logRefreshTimer = null;
+                }
+            }
+        } catch (err) {
+            console.error('Failed to fetch logs:', err);
+        }
+    };
+
+    window.closeProcessingLogs = function () {
+        const modal = document.getElementById('processing-logs-modal');
+        if (modal) modal.classList.remove('active');
+        document.body.style.overflow = '';
+
+        if (logRefreshTimer) {
+            clearInterval(logRefreshTimer);
+            logRefreshTimer = null;
         }
     };
 
@@ -456,6 +650,7 @@
         if (e.key === 'Escape') {
             closeNewProjectModal();
             if (window.closeUploadPanel) window.closeUploadPanel();
+            if (window.closeProcessingLogs) window.closeProcessingLogs();
         }
         if (e.key === 'n' && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();

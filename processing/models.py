@@ -1,8 +1,9 @@
 """
 Drone3D Processing Models.
 
-DroneProject — top-level entity tracking an entire reconstruction job.
-DroneFile    — individual uploaded file (image, video, or SRT) linked to a project.
+DroneProject   — top-level entity tracking an entire reconstruction job.
+DroneFile      — individual uploaded file (image, video, or SRT) linked to a project.
+GeoAnnotation  — geospatial point of interest linked to a project (AI-detected, manual, or TAK-imported).
 """
 
 import uuid
@@ -18,6 +19,7 @@ class DroneProject(models.Model):
         QUEUED = "queued", "Queued"
         PREPROCESSING = "preprocessing", "Preprocessing"
         PROCESSING = "processing", "Processing"
+        ANALYZING = "analyzing", "AI Analysis"
         COMPLETED = "completed", "Completed"
         FAILED = "failed", "Failed"
 
@@ -42,6 +44,7 @@ class DroneProject(models.Model):
         db_index=True,
     )
     progress = models.FloatField(default=0.0)
+    progress_message = models.CharField(max_length=500, blank=True, default="")
     input_type = models.CharField(
         max_length=10,
         choices=InputType.choices,
@@ -73,6 +76,10 @@ class DroneProject(models.Model):
     dtm_path = models.CharField(max_length=500, blank=True, null=True)
     tiles_3d_path = models.CharField(max_length=500, blank=True, null=True)
     potree_output_path = models.CharField(max_length=500, blank=True, null=True)
+
+    # AI Analysis
+    ai_analysis_enabled = models.BooleanField(default=True)
+    ai_report = models.TextField(blank=True, default="")
 
     # Timestamps
     created_at = models.DateTimeField(default=timezone.now)
@@ -107,6 +114,41 @@ class DroneProject(models.Model):
             "srts": files.filter(file_type=DroneFile.FileType.SRT).count(),
             "total": files.count(),
         }
+
+    @property
+    def annotation_count(self):
+        """Return total number of annotations."""
+        return self.annotations.count()
+
+    def update_progress(self, progress: float, message: str = ""):
+        """Update progress and optional status message atomically."""
+        self.progress = min(progress, 100.0)
+        if message:
+            self.progress_message = message[:500]
+        self.save(update_fields=["progress", "progress_message"])
+
+    def get_output_path(self, output_type: str) -> str | None:
+        """Return the absolute path for an output type, or None if unavailable."""
+        from django.conf import settings
+        import os
+
+        field_map = {
+            "orthophoto": "orthophoto_path",
+            "pointcloud": "pointcloud_path",
+            "mesh": "mesh_path",
+            "dsm": "dsm_path",
+            "dtm": "dtm_path",
+            "tiles_3d": "tiles_3d_path",
+            "potree": "potree_output_path",
+        }
+        field = field_map.get(output_type)
+        if not field:
+            return None
+        rel_path = getattr(self, field)
+        if not rel_path:
+            return None
+        abs_path = os.path.join(str(settings.MEDIA_ROOT), rel_path)
+        return abs_path if os.path.exists(abs_path) else None
 
 
 class DroneFile(models.Model):
@@ -153,3 +195,85 @@ class DroneFile(models.Model):
 
     def __str__(self):
         return f"{self.original_filename} ({self.get_file_type_display()})"
+
+
+class GeoAnnotation(models.Model):
+    """A geospatial point of interest linked to a Drone3D project.
+
+    Annotations can originate from:
+      - AI scene analysis (source='ai')
+      - Manual user placement (source='manual')
+      - TAK/CoT import (source='tak')
+      - External data import (source='external')
+    """
+
+    class Category(models.TextChoices):
+        STRUCTURE = "structure", "Structure"
+        VEHICLE = "vehicle", "Vehicle"
+        LZ = "lz", "Landing Zone"
+        OBSTACLE = "obstacle", "Obstacle"
+        POI = "poi", "Point of Interest"
+        THREAT = "threat", "Threat"
+        ROUTE_WP = "route_wp", "Route Waypoint"
+
+    class Source(models.TextChoices):
+        AI = "ai", "AI Detected"
+        MANUAL = "manual", "Manual"
+        TAK = "tak", "TAK Import"
+        EXTERNAL = "external", "External Import"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(
+        DroneProject,
+        on_delete=models.CASCADE,
+        related_name="annotations",
+    )
+    label = models.CharField(max_length=255)
+    category = models.CharField(
+        max_length=20,
+        choices=Category.choices,
+        default=Category.POI,
+        db_index=True,
+    )
+    latitude = models.FloatField()
+    longitude = models.FloatField()
+    altitude = models.FloatField(null=True, blank=True)
+    confidence = models.FloatField(null=True, blank=True)
+    source = models.CharField(
+        max_length=20,
+        choices=Source.choices,
+        default=Source.MANUAL,
+        db_index=True,
+    )
+    cot_uid = models.CharField(max_length=255, blank=True, default="")
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.label} ({self.get_category_display()}) @ {self.latitude:.4f},{self.longitude:.4f}"
+
+    def to_cot(self) -> str:
+        """Serialize this annotation as a CoT XML event."""
+        from tak_integration.cot import build_cot_event
+
+        type_map = {
+            "structure": "a-n-G",
+            "vehicle": "a-n-G-E-V",
+            "lz": "b-r-.-J",
+            "obstacle": "a-n-G-E-O",
+            "threat": "a-h-G",
+            "poi": "a-n-G",
+            "route_wp": "b-m-p-w",
+        }
+        return build_cot_event(
+            event_type=type_map.get(self.category, "a-n-G"),
+            lat=self.latitude,
+            lon=self.longitude,
+            hae=self.altitude or 0.0,
+            callsign=f"D3D-{self.label[:12]}",
+            uid=self.cot_uid or f"drone3d-{self.id}",
+            details={"remarks": {"text": self.label}},
+        )

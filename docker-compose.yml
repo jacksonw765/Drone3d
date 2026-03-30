@@ -26,8 +26,10 @@ services:
       resources:
         limits:
           memory: ${NODEODM_MEMORY_LIMIT:-20G}
+          cpus: '12'
         reservations:
           memory: 2G
+          cpus: '4'
     tmpfs:
       - /tmp:size=2G
     healthcheck:
@@ -36,6 +38,24 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+
+  # ── Ollama LLM Inference ──────────────────────────────────
+  # By default runs on CPU. For NVIDIA GPU acceleration, use:
+  #   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+  # For Apple Silicon (MLX), run Ollama natively:
+  #   brew install ollama && ollama serve
+  #   Then set OLLAMA_HOST=http://host.docker.internal:11434
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /bin/ollama || exit 0 && ollama list > /dev/null 2>&1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
   # ── Django Web Application ────────────────────────────────
   web:
@@ -54,11 +74,14 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - NODEODM_HOST=nodeodm
       - NODEODM_PORT=3000
+      - OLLAMA_HOST=http://host.docker.internal:11434
     depends_on:
       redis:
         condition: service_healthy
       nodeodm:
         condition: service_healthy
+      ollama:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
       interval: 15s
@@ -80,11 +103,14 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - NODEODM_HOST=nodeodm
       - NODEODM_PORT=3000
+      - OLLAMA_HOST=http://host.docker.internal:11434
     depends_on:
       redis:
         condition: service_healthy
       nodeodm:
         condition: service_healthy
+      ollama:
+        condition: service_started
       web:
         condition: service_healthy
 
@@ -94,3 +120,4 @@ volumes:
   media_data:
   static_data:
   db_data:
+  ollama_data:

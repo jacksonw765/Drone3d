@@ -18,6 +18,8 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("health/", health_check, name="health_check"),
     path("viewer/", include("viewer.urls")),
+    path("tak/", include("tak_integration.urls")),
+    path("ai/", include("ai_analysis.urls")),
     path("", include("processing.urls")),
 ]
 

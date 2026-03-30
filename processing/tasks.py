@@ -69,12 +69,18 @@ def process_project(self, project_id: str):
         # ─── Step 5: Convert for Potree ──────────────────
         _step_convert_potree(project)
 
+        # ─── Step 6: AI Scene Analysis (optional) ────────
+        _step_ai_analysis(project)
+
         # ─── Done ────────────────────────────────────────
-        project.status = DroneProject.Status.COMPLETED
-        project.progress = 100.0
-        project.completed_at = timezone.now()
-        project.save()
-        logger.info(f"Project {project.name} completed successfully")
+        # AI task marks project as COMPLETED when it finishes.
+        # If AI was skipped, mark complete here.
+        if project.status != DroneProject.Status.ANALYZING:
+            project.status = DroneProject.Status.COMPLETED
+            project.progress = 100.0
+            project.completed_at = timezone.now()
+            project.save()
+        logger.info(f"Project {project.name} pipeline completed")
 
     except Exception as exc:
         logger.exception(f"Project {project.name} failed: {exc}")
@@ -87,8 +93,9 @@ def process_project(self, project_id: str):
 def _step_preprocess(project: DroneProject):
     """Detect input type and preprocess video files if needed."""
     project.status = DroneProject.Status.PREPROCESSING
-    project.progress = 5.0
-    project.save(update_fields=["status", "progress"])
+    project.progress = 1.0
+    project.progress_message = "Preprocessing"
+    project.save(update_fields=["status", "progress", "progress_message"])
 
     all_files = list(project.files.all())
     filenames = [f.original_filename for f in all_files]
@@ -139,8 +146,9 @@ def _step_preprocess(project: DroneProject):
                     source=DroneFile.Source.EXTRACTED,
                 )
 
-    project.progress = 15.0
-    project.save(update_fields=["progress"])
+    project.progress = 2.0
+    project.progress_message = "Preprocessed"
+    project.save(update_fields=["progress", "progress_message"])
 
 
 def _check_images_have_gps(image_paths: list[str], sample_size: int = 10) -> bool:
@@ -208,8 +216,9 @@ def _generate_geo_txt(
 def _step_submit_to_nodeodm(project: DroneProject):
     """Submit images to NodeODM via PyODM."""
     project.status = DroneProject.Status.PROCESSING
-    project.progress = 20.0
-    project.save(update_fields=["status", "progress"])
+    project.progress = 3.0
+    project.progress_message = "Submitting to processing engine"
+    project.save(update_fields=["status", "progress", "progress_message"])
 
     # Collect all image paths (original uploads + extracted frames)
     image_files = project.files.filter(file_type=DroneFile.FileType.IMAGE)
@@ -451,18 +460,90 @@ def _classify_odm_error(exit_code, last_error, output_text, image_count, quality
     }
 
 
+# ── ODM Stage Markers for Progress Estimation ────────────
+# Maps console output patterns to progress sub-ranges within 5-85%
+# (preprocessing uses 0-3%, post-processing uses 85-100%)
+_ODM_STAGE_MARKERS = [
+    {"pattern": "running odm_report",       "range": (5, 8),    "label": "Generating report"},
+    {"pattern": "running dataset",          "range": (8, 12),   "label": "Preparing dataset"},
+    {"pattern": "running opensfm",          "range": (12, 30),  "label": "Structure from Motion"},
+    {"pattern": "extracting features",      "range": (13, 22),  "label": "Extracting features"},
+    {"pattern": "matching",                 "range": (22, 30),  "label": "Matching features"},
+    {"pattern": "reconstructing",           "range": (30, 38),  "label": "Reconstructing scene"},
+    {"pattern": "undistorting",             "range": (38, 45),  "label": "Undistorting images"},
+    {"pattern": "running openmvs",          "range": (45, 48),  "label": "Preparing dense reconstruction"},
+    {"pattern": "densifypointclo",          "range": (48, 62),  "label": "Dense point cloud generation"},
+    {"pattern": "running odm_filterpoints", "range": (62, 65),  "label": "Filtering point cloud"},
+    {"pattern": "running odm_meshing",      "range": (65, 70),  "label": "Generating mesh"},
+    {"pattern": "reconstructmesh",          "range": (66, 70),  "label": "Reconstructing mesh"},
+    {"pattern": "running mvs_texturing",    "range": (70, 76),  "label": "Texturing mesh"},
+    {"pattern": "texturemesh",              "range": (70, 76),  "label": "Texturing mesh"},
+    {"pattern": "running odm_georef",       "range": (76, 79),  "label": "Georeferencing"},
+    {"pattern": "running odm_orthophoto",   "range": (79, 82),  "label": "Generating orthophoto"},
+    {"pattern": "running odm_dem",          "range": (82, 84),  "label": "Generating elevation model"},
+    {"pattern": "running odm_postprocess",  "range": (84, 85),  "label": "Post-processing"},
+]
+
+
+def _estimate_progress_from_output(task, image_count: int) -> tuple[float, str]:
+    """Parse NodeODM console output to estimate fine-grained progress.
+
+    Returns (estimated_progress, stage_label) where progress is in the 20-80 range.
+    Falls back to (0, "") if no stage can be identified.
+    """
+    try:
+        lines = task.output(-20)
+        if not lines:
+            return 0, ""
+    except Exception:
+        return 0, ""
+
+    # Scan lines in reverse to find the most recent stage marker
+    combined = "\n".join(lines).lower()
+    best_progress = 0.0
+    best_label = ""
+
+    for marker in _ODM_STAGE_MARKERS:
+        if marker["pattern"] in combined:
+            lo, hi = marker["range"]
+            best_progress = (lo + hi) / 2.0
+            best_label = marker["label"]
+            # Don't break — later markers in the list represent later stages,
+            # so keep scanning for a more advanced match
+
+    # For "undistorting" we can parse "Undistorting image N" to get sub-progress
+    if "undistorting" in combined and image_count > 0:
+        count = 0
+        for line in lines:
+            if "undistorting image" in line.lower():
+                count += 1
+        # Rough estimate: how far through undistortion
+        # The last line's image is approximate since we only see 20 lines
+        lo, hi = 38, 45
+        sub_frac = min(count / min(image_count, 20), 1.0)
+        best_progress = lo + sub_frac * (hi - lo)
+        best_label = f"Undistorting images"
+
+    return best_progress, best_label
+
+
 def _step_poll_completion(project: DroneProject):
     """Poll NodeODM until the task completes or fails."""
     node = Node(settings.NODEODM_HOST, settings.NODEODM_PORT)
     task = node.get_task(project.nodeodm_task_uuid)
+
+    image_count = project.files.filter(
+        file_type=DroneFile.FileType.IMAGE
+    ).count()
 
     while True:
         info = task.info()
         status_code = info.status.value if hasattr(info.status, "value") else info.status
 
         if status_code == ODM_COMPLETED:
-            project.progress = 80.0
-            project.save(update_fields=["progress"])
+            project.progress = 85.0
+            project.progress_message = "Processing complete"
+            project.save(update_fields=["progress", "progress_message"])
             logger.info(f"NodeODM task {task.uuid} completed")
             return
 
@@ -492,11 +573,6 @@ def _step_poll_completion(project: DroneProject):
                     except (ValueError, IndexError):
                         pass
 
-            # Count images for context in the error message
-            image_count = project.files.filter(
-                file_type=DroneFile.FileType.IMAGE
-            ).count()
-
             # Classify the error
             error_detail = _classify_odm_error(
                 exit_code=exit_code,
@@ -511,8 +587,6 @@ def _step_poll_completion(project: DroneProject):
                 f"{error_detail['summary']}\n\n"
                 f"💡 {error_detail['suggestion']}"
             )
-            # Store both the readable message and the structured detail as JSON
-            # The first line is the user summary, followed by a JSON block
             stored_message = _json.dumps({
                 "category": error_detail["category"],
                 "summary": error_detail["summary"],
@@ -532,18 +606,38 @@ def _step_poll_completion(project: DroneProject):
             raise RuntimeError("NodeODM task was canceled")
 
         elif status_code == ODM_RUNNING:
-            # Map ODM progress (0-100) to our range (20-80)
+            # Primary: use ODM's own progress if it's meaningful (> 0)
             odm_progress = getattr(info, "progress", 0) or 0
-            project.progress = 20.0 + (odm_progress * 0.6)
-            project.save(update_fields=["progress"])
+            # Map ODM's 0-100 into our 5-85 range
+            mapped_progress = 5.0 + (odm_progress * 0.8)
+
+            # Secondary: parse console output for finer-grained stage estimation
+            stage_progress, stage_label = _estimate_progress_from_output(
+                task, image_count
+            )
+
+            # Use whichever is higher — ODM progress or our stage estimate
+            # This prevents the bar from going backwards
+            final_progress = max(mapped_progress, stage_progress)
+
+            # Never go backwards
+            if final_progress > project.progress:
+                project.progress = final_progress
+
+            # Always update the stage label if we have one
+            if stage_label:
+                project.progress_message = stage_label
+
+            project.save(update_fields=["progress", "progress_message"])
 
         time.sleep(POLL_INTERVAL)
 
 
 def _step_download_results(project: DroneProject):
     """Download and extract results from NodeODM."""
-    project.progress = 82.0
-    project.save(update_fields=["progress"])
+    project.progress = 86.0
+    project.progress_message = "Downloading results"
+    project.save(update_fields=["progress", "progress_message"])
 
     node = Node(settings.NODEODM_HOST, settings.NODEODM_PORT)
     task = node.get_task(project.nodeodm_task_uuid)
@@ -561,8 +655,9 @@ def _step_download_results(project: DroneProject):
     zip_path = task.download_zip(output_dir)
     logger.info(f"Downloaded zip: {zip_path}")
 
-    project.progress = 88.0
-    project.save(update_fields=["progress"])
+    project.progress = 90.0
+    project.progress_message = "Extracting results"
+    project.save(update_fields=["progress", "progress_message"])
 
     # Extract zip
     logger.info(f"Extracting results to {output_dir}")
@@ -587,8 +682,21 @@ def _step_download_results(project: DroneProject):
     # Map known output files
     _map_output_paths(project, output_dir)
 
+    # ── Free NodeODM memory ──────────────────────────────
+    # Results are now on disk. Remove the NodeODM task to release
+    # all cached images/intermediates from RAM so Ollama can use it.
+    try:
+        task.remove()
+        logger.info(
+            f"Removed NodeODM task {project.nodeodm_task_uuid} to free memory "
+            f"(results already extracted to {output_dir})"
+        )
+    except Exception as e:
+        logger.warning(f"Could not remove NodeODM task for memory reclaim: {e}")
+
     project.progress = 92.0
-    project.save(update_fields=["progress"])
+    project.progress_message = "Results extracted"
+    project.save(update_fields=["progress", "progress_message"])
 
 
 def _map_output_paths(project: DroneProject, output_dir: str):
@@ -720,6 +828,37 @@ def _step_convert_potree(project: DroneProject):
 
     project.progress = 98.0
     project.save(update_fields=["progress"])
+
+
+def _step_ai_analysis(project: DroneProject):
+    """Conditionally launch AI scene analysis as a Celery task."""
+    from django.conf import settings as django_settings
+
+    ai_enabled = getattr(django_settings, "AI_ANALYSIS_ENABLED", True)
+
+    if not ai_enabled:
+        logger.info(f"AI analysis disabled globally, skipping for {project.name}")
+        return
+
+    if not project.ai_analysis_enabled:
+        logger.info(f"AI analysis disabled for project {project.name}")
+        return
+
+    if not project.orthophoto_path:
+        logger.info(f"No orthophoto for {project.name}, skipping AI analysis")
+        return
+
+    # Brief pause to allow Docker VM to reclaim memory freed by NodeODM
+    # task.remove() before Ollama loads the vision model
+    logger.info("Waiting for memory reclaim before AI analysis...")
+    time.sleep(5)
+
+    logger.info(f"Launching AI scene analysis for project {project.name}")
+    project.status = DroneProject.Status.ANALYZING
+    project.update_progress(90, "Queuing AI analysis...")
+
+    from ai_analysis.tasks import ai_scene_analysis
+    ai_scene_analysis.delay(str(project.id))
 
 
 @shared_task

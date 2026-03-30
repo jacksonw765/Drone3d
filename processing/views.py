@@ -9,6 +9,7 @@ import logging
 import os
 import traceback
 
+from celery.result import AsyncResult
 from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -247,6 +248,7 @@ def project_status(request, project_id):
         "status": project.status,
         "status_display": project.get_status_display(),
         "progress": round(project.progress, 1),
+        "progress_message": project.progress_message,
         "input_type": project.input_type,
         "quality_preset": project.quality_preset,
         "error_message": error_message,
@@ -260,6 +262,10 @@ def project_status(request, project_id):
         "has_mesh": bool(project.mesh_path),
         "has_potree": bool(project.potree_output_path),
         "has_3d_tiles": bool(project.tiles_3d_path),
+        # AI Analysis
+        "ai_analysis_enabled": project.ai_analysis_enabled,
+        "has_ai_report": bool(project.ai_report),
+        "annotation_count": project.annotation_count,
     }
 
     return JsonResponse(data)
@@ -296,15 +302,188 @@ def project_delete(request, project_id):
     """Delete a project and all its data."""
     project = get_object_or_404(DroneProject, id=project_id)
 
-    # Don't allow deleting a currently processing project
-    if project.status == DroneProject.Status.PROCESSING:
-        return JsonResponse(
-            {"error": "Cannot delete a project that is currently processing"},
-            status=400,
-        )
+    # Don't allow deleting a currently processing project without canceling first
+    if project.status in (DroneProject.Status.PROCESSING, DroneProject.Status.PREPROCESSING):
+        # Auto-cancel before deleting
+        _cancel_nodeodm_task(project)
 
     project_name = project.name
     delete_project_data.delay(str(project.id))
 
     logger.info(f"Queued deletion of project {project_name}")
     return JsonResponse({"message": f"Project '{project_name}' scheduled for deletion"})
+
+
+def _cancel_nodeodm_task(project):
+    """Cancel a NodeODM task and revoke the Celery task."""
+    # Cancel NodeODM task
+    if project.nodeodm_task_uuid:
+        try:
+            from pyodm import Node
+            node = Node(settings.NODEODM_HOST, settings.NODEODM_PORT)
+            task = node.get_task(project.nodeodm_task_uuid)
+            task.cancel()
+            logger.info(f"Canceled NodeODM task {project.nodeodm_task_uuid}")
+        except Exception as e:
+            logger.warning(f"Could not cancel NodeODM task: {e}")
+
+    # Revoke Celery task
+    if project.celery_task_id:
+        try:
+            AsyncResult(project.celery_task_id).revoke(terminate=True, signal='SIGTERM')
+            logger.info(f"Revoked Celery task {project.celery_task_id}")
+        except Exception as e:
+            logger.warning(f"Could not revoke Celery task: {e}")
+
+
+@require_POST
+@csrf_protect
+def cancel_processing(request, project_id):
+    """Cancel a running processing job.
+
+    POST /api/projects/<uuid>/cancel/
+    """
+    project = get_object_or_404(DroneProject, id=project_id)
+
+    if project.status not in (
+        DroneProject.Status.QUEUED,
+        DroneProject.Status.PREPROCESSING,
+        DroneProject.Status.PROCESSING,
+        DroneProject.Status.ANALYZING,
+    ):
+        return JsonResponse(
+            {"error": f"Project is not currently processing (status: {project.status})"},
+            status=400,
+        )
+
+    _cancel_nodeodm_task(project)
+
+    project.status = DroneProject.Status.FAILED
+    project.error_message = json.dumps({
+        "category": "canceled",
+        "summary": "Processing was canceled by user",
+        "suggestion": "You can re-run processing at any time by clicking Retry.",
+    })
+    project.save(update_fields=["status", "error_message"])
+
+    logger.info(f"User canceled processing for {project.name}")
+    return JsonResponse({"message": "Processing canceled", "status": "failed"})
+
+
+@require_GET
+def processing_logs(request, project_id):
+    """Fetch live NodeODM console output for a project.
+
+    GET /api/projects/<uuid>/logs/?lines=50
+    """
+    project = get_object_or_404(DroneProject, id=project_id)
+
+    lines_count = min(int(request.GET.get("lines", 50)), 200)
+
+    logs = []
+    odm_progress = 0
+    odm_status = "unknown"
+
+    if project.nodeodm_task_uuid:
+        try:
+            from pyodm import Node
+            node = Node(settings.NODEODM_HOST, settings.NODEODM_PORT)
+            task = node.get_task(project.nodeodm_task_uuid)
+            info = task.info()
+
+            # Get status
+            status_code = info.status.value if hasattr(info.status, "value") else info.status
+            status_map = {10: "queued", 20: "running", 30: "failed", 40: "completed", 50: "canceled"}
+            odm_status = status_map.get(status_code, "unknown")
+            odm_progress = getattr(info, "progress", 0) or 0
+
+            # Get console output
+            try:
+                output_lines = task.output(-lines_count)
+                if output_lines:
+                    logs = output_lines
+            except Exception:
+                pass
+
+        except Exception as e:
+            logs = [f"Could not fetch logs: {str(e)}"]
+
+    # Build pipeline step summary
+    steps = _build_pipeline_steps(project, odm_progress, odm_status)
+
+    return JsonResponse({
+        "project_id": str(project.id),
+        "status": project.status,
+        "progress": round(project.progress, 1),
+        "odm_status": odm_status,
+        "odm_progress": round(odm_progress, 1),
+        "steps": steps,
+        "logs": logs[-lines_count:],
+    })
+
+
+def _build_pipeline_steps(project, odm_progress, odm_status):
+    """Build a summary of pipeline steps for the UI."""
+    progress = project.progress
+    status = project.status
+    msg = project.progress_message or ""
+
+    # Build 3D Reconstruction detail with stage-aware messaging
+    if progress >= 5 and progress <= 85:
+        if msg:
+            recon_detail = f"{msg} ({progress:.0f}%)"
+        else:
+            recon_detail = f"NodeODM: {odm_status} ({odm_progress:.0f}%)"
+    elif progress > 85:
+        recon_detail = "Complete"
+    else:
+        recon_detail = "Waiting"
+
+    # Build download detail with stage-aware messaging
+    if 85 < progress <= 93:
+        download_detail = msg if msg else "Extracting output files"
+    elif progress > 93:
+        download_detail = "Complete"
+    else:
+        download_detail = "Waiting"
+
+    steps = [
+        {
+            "name": "Upload & Preprocessing",
+            "status": "done" if progress > 2 else ("active" if status in ("preprocessing", "queued") else "pending"),
+            "detail": "Detecting input type, extracting frames" if progress <= 2 else "Complete",
+        },
+        {
+            "name": "Submit to NodeODM",
+            "status": "done" if progress > 5 else ("active" if progress >= 2 else "pending"),
+            "detail": "Uploading images to processing engine" if progress <= 5 else "Complete",
+        },
+        {
+            "name": "3D Reconstruction",
+            "status": "done" if progress > 85 else ("active" if progress >= 5 else "pending"),
+            "detail": recon_detail,
+        },
+        {
+            "name": "Download Results",
+            "status": "done" if progress > 93 else ("active" if progress > 85 else "pending"),
+            "detail": download_detail,
+        },
+        {
+            "name": "Potree Conversion",
+            "status": "done" if progress > 98 else ("active" if progress > 93 else "pending"),
+            "detail": "Converting point cloud for browser" if 93 < progress <= 98 else (
+                "Complete" if progress > 98 else "Waiting"
+            ),
+        },
+    ]
+
+    if project.ai_analysis_enabled:
+        steps.append({
+            "name": "AI Analysis",
+            "status": "active" if status == "analyzing" else ("done" if status == "completed" else "pending"),
+            "detail": project.progress_message or "Scene analysis" if status == "analyzing" else (
+                "Complete" if status == "completed" else "Waiting"
+            ),
+        })
+
+    return steps

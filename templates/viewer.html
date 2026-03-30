@@ -296,6 +296,30 @@
             {% endif %}
         </div>
     </div>
+
+    <!-- AI Report -->
+    {% if project.ai_report %}
+    <div class="panel-section">
+        <div class="panel-section-title" style="display:flex;justify-content:space-between;align-items:center;">
+            Tactical Assessment
+            <span style="font-size:0.65rem;padding:2px 6px;border-radius:4px;background:rgba(129,140,248,0.15);color:#818cf8;">AI</span>
+        </div>
+        <div class="ai-report-content" style="font-size:0.78rem;color:var(--text-secondary);line-height:1.6;max-height:300px;overflow-y:auto;white-space:pre-wrap;">
+            {{ project.ai_report|truncatewords:300 }}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- TAK Export -->
+    <div class="panel-section">
+        <div class="panel-section-title">Export</div>
+        <div class="download-list">
+            <button class="download-item" id="btn-tak-export" onclick="window.D3D_Export && window.D3D_Export.takExport()" style="width:100%;border:none;cursor:pointer;text-align:left;">
+                <span class="download-icon">📡</span>
+                ATAK Data Package (.zip)
+            </button>
+        </div>
+    </div>
 </div>
 
 <!-- Coordinate Display -->
@@ -325,6 +349,7 @@
         hasPotree: {% if has_potree %}true{% else %}false{% endif %},
         hasMesh: {% if has_mesh %}true{% else %}false{% endif %},
         hasOrthophoto: {% if has_orthophoto %}true{% else %}false{% endif %},
+        hasAiReport: {% if project.ai_report %}true{% else %}false{% endif %},
         potreeDataUrl: '{{ potree_data_url }}',
         meshDataUrl: '{{ mesh_data_url }}',
         meshFilename: '{{ mesh_filename|default:"" }}',
@@ -349,5 +374,39 @@
 </script>
 <script type="module" src="{% static 'js/mesh-viewer.js' %}"></script>
 {% endif %}
+<!-- AI & Annotation Overlays (loaded for all viewer modes) -->
+<script src="{% static 'js/annotations.js' %}"></script>
+<script src="{% static 'js/ai-query.js' %}"></script>
+<script>
+    /* TAK Export helper */
+    window.D3D_Export = {
+        async takExport() {
+            const btn = document.getElementById('btn-tak-export');
+            if (btn) btn.textContent = 'Exporting...';
+            try {
+                const csrfToken = document.cookie.split(';').find(c => c.trim().startsWith('csrftoken=')).split('=')[1];
+                const resp = await fetch(`/tak/export/${window.VIEWER_CONFIG.projectId}/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken },
+                });
+                if (resp.ok) {
+                    const blob = await resp.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `Drone3D-TAK-${window.VIEWER_CONFIG.projectName}.zip`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                } else {
+                    const err = await resp.json();
+                    alert(err.error || 'Export failed');
+                }
+            } catch (e) {
+                alert('Export failed: ' + e.message);
+            }
+            if (btn) btn.innerHTML = '<span class="download-icon">📡</span> ATAK Data Package (.zip)';
+        }
+    };
+</script>
 {% endif %}
 {% endblock %}

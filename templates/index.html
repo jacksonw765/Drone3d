@@ -30,10 +30,13 @@
                 </div>
 
                 {% if project.status == 'processing' or project.status == 'preprocessing' or project.status == 'queued' %}
-                <div class="progress-bar">
+                <div class="progress-bar" onclick="showProcessingLogs('{{ project.id }}')" style="cursor:pointer;" title="Click for processing details">
                     <div class="progress-bar-fill" style="width: {{ project.progress }}%"></div>
                 </div>
-                <div class="progress-text">{{ project.progress|floatformat:1 }}%</div>
+                <div class="progress-text" style="display:flex;justify-content:space-between;align-items:center;">
+                    <span>{{ project.progress|floatformat:1 }}%</span>
+                    <span style="font-size:0.7rem;color:var(--text-tertiary);cursor:pointer;" onclick="showProcessingLogs('{{ project.id }}')">📋 View logs</span>
+                </div>
                 {% endif %}
 
                 {% if project.error_message %}
@@ -103,8 +106,12 @@
                     🗑
                 </button>
                 {% else %}
-                <span class="text-sm text-secondary">Processing...</span>
-                <span></span>
+                <button class="btn btn-secondary btn-sm" onclick="showProcessingLogs('{{ project.id }}')">
+                    📋 Pipeline Status
+                </button>
+                <button class="btn btn-danger btn-sm" onclick="cancelProcessing('{{ project.id }}', '{{ project.name }}')">
+                    ✕ Cancel
+                </button>
                 {% endif %}
             </div>
         </div>

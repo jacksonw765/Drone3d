@@ -22,5 +22,7 @@ urlpatterns = [
     path("api/projects/<uuid:project_id>/upload/", views.upload_file, name="upload_file"),
     path("api/projects/<uuid:project_id>/process/", views.start_processing, name="start_processing"),
     path("api/projects/<uuid:project_id>/status/", views.project_status, name="project_status"),
+    path("api/projects/<uuid:project_id>/cancel/", views.cancel_processing, name="cancel_processing"),
+    path("api/projects/<uuid:project_id>/logs/", views.processing_logs, name="processing_logs"),
     path("api/projects/<uuid:project_id>/delete/", views.project_delete, name="project_delete"),
 ]

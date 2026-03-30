@@ -30,6 +30,8 @@ INSTALLED_APPS = [
     # Local apps
     "processing",
     "viewer",
+    "tak_integration",
+    "ai_analysis",
 ]
 
 MIDDLEWARE = [
@@ -170,19 +172,27 @@ LOGGING = {
             "handlers": ["console"],
             "level": "DEBUG",
         },
+        "tak_integration": {
+            "handlers": ["console"],
+            "level": "DEBUG",
+        },
+        "ai_analysis": {
+            "handlers": ["console"],
+            "level": "DEBUG",
+        },
     },
 }
 
 # ── ODM Processing Presets ──────────────────────────────────
-# NOTE: video-resolution removed — 4K source frames should NOT be
-# downscaled before ODM. ODM's resize-to handles this internally.
+# NOTE: NodeODM's API only accepts options from its /options endpoint.
+# Options like opensfm-processes, depthmap-resolution, resize-to are
+# ODM CLI-only and silently dropped by NodeODM. CPU parallelism is
+# managed internally by ODM based on available cores (nproc).
 ODM_PRESETS = {
     "low": {
         "pc-quality": "lowest",
         "feature-quality": "low",       # Bumped from 'lowest' — video needs more features
         "mesh-octree-depth": 8,
-        "resize-to": 1024,
-        "depthmap-resolution": 640,
         "orthophoto-resolution": 10,
         "use-3dmesh": True,
         "max-concurrency": 1,
@@ -194,8 +204,6 @@ ODM_PRESETS = {
         "pc-quality": "low",
         "feature-quality": "medium",    # Bumped from 'low' — more features for video overlap
         "mesh-octree-depth": 9,
-        "resize-to": 2048,
-        "depthmap-resolution": 1280,
         "orthophoto-resolution": 8,
         "use-3dmesh": True,
         "max-concurrency": 1,
@@ -209,8 +217,6 @@ ODM_PRESETS = {
         "pc-quality": "medium",
         "feature-quality": "high",      # Bumped from 'medium'
         "mesh-octree-depth": 10,
-        "resize-to": 3072,
-        "depthmap-resolution": 1920,
         "orthophoto-resolution": 5,
         "use-3dmesh": True,
         "max-concurrency": 1,
@@ -226,7 +232,6 @@ ODM_PRESETS = {
         "pc-quality": "high",
         "feature-quality": "ultra",     # Bumped from 'high'
         "mesh-octree-depth": 11,
-        "resize-to": 4096,
         "orthophoto-resolution": 3,
         "use-3dmesh": True,
         "max-concurrency": 1,
@@ -249,3 +254,16 @@ VIDEO_ODM_OVERRIDES = {
     "matcher-type": "bow",
     "min-num-features": 12000,         # More features for high-similarity frames (default: 10000)
 }
+
+# ── Ollama (AI Analysis) ────────────────────────────────────
+OLLAMA_HOST = config("OLLAMA_HOST", default="http://localhost:11434")
+OLLAMA_PRIMARY_MODEL = config("OLLAMA_PRIMARY_MODEL", default="llama3.2-vision:11b")
+OLLAMA_TEXT_MODEL = config("OLLAMA_TEXT_MODEL", default="llama3.2-vision:11b")
+AI_ANALYSIS_ENABLED = config("AI_ANALYSIS_ENABLED", default=True, cast=bool)
+AI_TILE_SIZE = config("AI_TILE_SIZE", default=512, cast=int)
+AI_CONFIDENCE_THRESHOLD = config("AI_CONFIDENCE_THRESHOLD", default=0.4, cast=float)
+
+# ── TAK Integration ─────────────────────────────────────────
+TAK_ENABLED = config("TAK_ENABLED", default=False, cast=bool)
+TAK_SERVER_HOST = config("TAK_SERVER_HOST", default="")
+TAK_SERVER_PORT = config("TAK_SERVER_PORT", default=8087, cast=int)

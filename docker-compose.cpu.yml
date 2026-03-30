@@ -1,0 +1,17 @@
+# ─────────────────────────────────────────────────────────
+# CPU-only override for Ollama.
+#
+# Use this on machines WITHOUT an NVIDIA GPU:
+#   docker compose -f docker-compose.yml -f docker-compose.cpu.yml up -d
+#
+# On Apple Silicon, consider running Ollama natively instead
+# for MLX acceleration:
+#   brew install ollama && ollama serve
+#   Then set OLLAMA_HOST=http://host.docker.internal:11434
+# ─────────────────────────────────────────────────────────
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices: []
