@@ -88,6 +88,18 @@
     <div class="viewer-toolbar-divider"></div>
     <span class="viewer-title">{{ project.name }}</span>
     <span id="mesh-info" style="display:none;font-size:0.75rem;color:var(--text-tertiary);margin-left:8px;"></span>
+
+    {% if can_switch_to_mesh %}
+    <a href="?mode=mesh" class="viewer-toolbar-btn" title="Switch to Mesh Viewer" style="font-size:0.7rem;padding:4px 10px;text-decoration:none;">
+        △ Mesh
+    </a>
+    {% endif %}
+    {% if can_switch_to_pointcloud %}
+    <a href="?mode=pointcloud" class="viewer-toolbar-btn" title="Switch to Point Cloud Viewer" style="font-size:0.7rem;padding:4px 10px;text-decoration:none;">
+        ⬡ Point Cloud
+    </a>
+    {% endif %}
+
     <div class="viewer-toolbar-divider"></div>
 
     {% if has_potree %}
@@ -102,6 +114,10 @@
     <button class="viewer-toolbar-btn" id="btn-reset-camera" title="Reset Camera [R]" onclick="resetCamera()">
         ⟲
     </button>
+    <button class="viewer-toolbar-btn" id="btn-topology" title="Topology View [T]" onclick="toggleTopologyView()">
+        ▲
+    </button>
+    <div class="viewer-toolbar-divider"></div>
     {% endif %}
     {% if has_orthophoto %}
     <button class="viewer-toolbar-btn" id="btn-toggle-ortho" title="Orthophoto" onclick="toggleLayer('orthophoto')">
@@ -113,10 +129,13 @@
 
     {% if has_potree %}
     <button class="viewer-toolbar-btn" id="btn-measure-distance" title="Measure Distance" onclick="activateMeasure('distance')">
-        📏
+        <i data-lucide="ruler" style="width:18px;height:18px;margin-right:8px;"></i>
     </button>
     <button class="viewer-toolbar-btn" id="btn-measure-area" title="Measure Area" onclick="activateMeasure('area')">
         ⬠
+    </button>
+    <button class="viewer-toolbar-btn" id="btn-topology" title="Topology View [T]" onclick="toggleTopologyView()">
+        <i data-lucide="mountain" style="width:18px;height:18px;margin-right:8px;"></i>
     </button>
     <div class="viewer-toolbar-divider"></div>
     {% endif %}
@@ -155,7 +174,7 @@
 <!-- No viewable data -->
 <div class="viewer-container" id="viewer-container">
     <div class="viewer-no-data">
-        <div class="viewer-no-data-icon">📦</div>
+        <div class="viewer-no-data-icon"><i data-lucide="package" class="inline-icon" style="width:16px;height:16px;"></i></div>
         <h2>No Viewable Output</h2>
         <p>The reconstruction completed but no mesh or point cloud was produced. Check the processing logs.</p>
         <a href="/" class="btn btn-secondary">← Back to Dashboard</a>
@@ -189,7 +208,7 @@
                 3D Mesh
             </div>
             <label class="toggle-switch">
-                <input type="checkbox" id="toggle-mesh" onchange="toggleLayer('mesh')">
+                <input type="checkbox" id="toggle-mesh" checked onchange="toggleLayer('mesh')">
                 <span class="toggle-slider"></span>
             </label>
         </div>
@@ -203,6 +222,34 @@
             </div>
             <label class="toggle-switch">
                 <input type="checkbox" id="toggle-orthophoto" onchange="toggleLayer('orthophoto')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        {% endif %}
+
+        {% if has_mesh and not has_potree %}
+        <div class="layer-toggle">
+            <div class="layer-label">
+                <div class="layer-icon" style="background: rgba(0,230,138,0.15); color: #00e68a;">▲</div>
+                Topology
+            </div>
+            <label class="toggle-switch">
+                <input type="checkbox" id="toggle-topology" onchange="window.toggleTopologyView && window.toggleTopologyView()">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        {% endif %}
+
+        <!-- AI Detections Layer -->
+        {% if project.ai_report %}
+        <div class="layer-toggle">
+            <div class="layer-label">
+                <div class="layer-icon" style="background: rgba(129,140,248,0.15); color: #818cf8;"><i data-lucide="crosshair" style="width:18px;height:18px;margin-right:8px;"></i></div>
+                AI Detections
+                <span id="annotation-layer-count" style="font-size:0.65rem;padding:1px 5px;border-radius:4px;background:rgba(129,140,248,0.15);color:#818cf8;margin-left:4px;">0</span>
+            </div>
+            <label class="toggle-switch">
+                <input type="checkbox" id="toggle-annotations" checked>
                 <span class="toggle-slider"></span>
             </label>
         </div>
@@ -239,6 +286,7 @@
             <select class="form-input form-select" id="select-color-mode" onchange="updateColorMode(this.value)">
                 <option value="rgb">RGB (Natural)</option>
                 <option value="elevation">Elevation</option>
+                <option value="height_above_ground">Height Above Ground</option>
                 <option value="intensity">Intensity</option>
                 <option value="classification">Classification</option>
             </select>
@@ -252,7 +300,7 @@
         <div class="download-list">
             {% if has_orthophoto %}
             <a href="/viewer/{{ project.id }}/download/orthophoto/" class="download-item">
-                <span class="download-icon">🗺</span>
+                <span class="download-icon"><i data-lucide="map" style="width:14px;height:14px;margin-right:6px;"></i></span>
                 Orthophoto (.tif)
             </a>
             {% endif %}
@@ -270,13 +318,13 @@
             {% endif %}
             {% if has_dsm %}
             <a href="/viewer/{{ project.id }}/download/dsm/" class="download-item">
-                <span class="download-icon">📊</span>
+                <span class="download-icon"><i data-lucide="bar-chart-2" class="inline-icon" style="width:16px;height:16px;"></i></span>
                 DSM (.tif)
             </a>
             {% endif %}
             {% if has_dtm %}
             <a href="/viewer/{{ project.id }}/download/dtm/" class="download-item">
-                <span class="download-icon">📈</span>
+                <span class="download-icon"><i data-lucide="trending-up" style="width:14px;height:14px;margin-right:6px;"></i></span>
                 DTM (.tif)
             </a>
             {% endif %}
@@ -315,7 +363,7 @@
         <div class="panel-section-title">Export</div>
         <div class="download-list">
             <button class="download-item" id="btn-tak-export" onclick="window.D3D_Export && window.D3D_Export.takExport()" style="width:100%;border:none;cursor:pointer;text-align:left;">
-                <span class="download-icon">📡</span>
+                <span class="download-icon"><i data-lucide="satellite" style="width:48px;height:48px;stroke-width:1.5;margin-bottom:16px;"></i></span>
                 ATAK Data Package (.zip)
             </button>
         </div>
@@ -336,6 +384,10 @@
         <span class="coord-label">ELEV</span>
         <span class="coord-value" id="coord-elev">—</span>
     </div>
+    <div class="coord-item">
+        <span class="coord-label">AGL</span>
+        <span class="coord-value" id="coord-agl">—</span>
+    </div>
 </div>
 
 {% endblock %}
@@ -347,12 +399,16 @@
         projectId: '{{ project.id }}',
         projectName: '{{ project.name|escapejs }}',
         hasPotree: {% if has_potree %}true{% else %}false{% endif %},
-        hasMesh: {% if has_mesh %}true{% else %}false{% endif %},
+        hasMesh: {% if has_mesh or can_switch_to_mesh %}true{% else %}false{% endif %},
         hasOrthophoto: {% if has_orthophoto %}true{% else %}false{% endif %},
+        hasDsm: {% if has_dsm %}true{% else %}false{% endif %},
+        hasDtm: {% if has_dtm %}true{% else %}false{% endif %},
         hasAiReport: {% if project.ai_report %}true{% else %}false{% endif %},
         potreeDataUrl: '{{ potree_data_url }}',
-        meshDataUrl: '{{ mesh_data_url }}',
+        meshDataUrl: '{% if mesh_data_url %}{{ mesh_data_url }}{% endif %}',
         meshFilename: '{{ mesh_filename|default:"" }}',
+        orthoCenterLat: {{ ortho_center_lat|default:"0" }},
+        orthoCenterLon: {{ ortho_center_lon|default:"0" }},
     };
 </script>
 {% if has_potree %}
@@ -361,6 +417,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 <script src="{% static 'potree/libs/three.js/build/three.min.js' %}"></script>
 <script src="{% static 'potree/build/potree.js' %}"></script>
+<script src="{% static 'js/elevation-profile.js' %}"></script>
 <script src="{% static 'js/viewer.js' %}"></script>
 {% elif has_mesh %}
 <!-- Three.js Mesh Viewer via ES modules -->
@@ -404,7 +461,7 @@
             } catch (e) {
                 alert('Export failed: ' + e.message);
             }
-            if (btn) btn.innerHTML = '<span class="download-icon">📡</span> ATAK Data Package (.zip)';
+            if (btn) btn.innerHTML = '<span class="download-icon"><i data-lucide="satellite" style="width:48px;height:48px;stroke-width:1.5;margin-bottom:16px;"></i></span> ATAK Data Package (.zip)';
         }
     };
 </script>

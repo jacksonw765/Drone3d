@@ -8,6 +8,7 @@ dist
 build
 media/uploads/*
 media/outputs/*
+data/logs/*
 node_modules
 .env
 .vscode

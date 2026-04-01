@@ -12,6 +12,40 @@
     const ACTIVE_STATUSES = new Set(['queued', 'preprocessing', 'processing', 'analyzing']);
     let pollTimers = {};
 
+    // ── Timer Utilities ────────────────────────────────
+    let cardTimers = {};  // projectId → intervalId for client-side timers
+
+    function formatElapsed(seconds) {
+        if (seconds == null || seconds < 0) return '';
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = seconds % 60;
+        if (h > 0) return `${h}h ${m}m ${s}s`;
+        if (m > 0) return `${m}m ${s}s`;
+        return `${s}s`;
+    }
+
+    function startCardTimer(projectId, startedAtISO) {
+        stopCardTimer(projectId);
+        if (!startedAtISO) return;
+        const startedAt = new Date(startedAtISO).getTime();
+        const update = () => {
+            const el = document.getElementById(`timer-${projectId}`);
+            if (!el) { stopCardTimer(projectId); return; }
+            const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+            el.textContent = `⏱ ${formatElapsed(elapsed)}`;
+        };
+        update();
+        cardTimers[projectId] = setInterval(update, 1000);
+    }
+
+    function stopCardTimer(projectId) {
+        if (cardTimers[projectId]) {
+            clearInterval(cardTimers[projectId]);
+            delete cardTimers[projectId];
+        }
+    }
+
     // Start polling for active projects on page load
     document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.project-card').forEach(card => {
@@ -36,6 +70,23 @@
                 }
             });
         }
+
+        // Enhancement radio info text
+        const enhanceInfoTexts = {
+            off: '',
+            standard: '⚡ Applies contrast, sharpening, and noise reduction. Adds ~30s for 100 images.',
+            super_res: '<i data-lucide="brain" class="inline-icon" style="width:16px;height:16px;"></i> AI upscales images 2× then enhances. Best for video frames. Adds ~3-5 min for 100 images.',
+        };
+        document.querySelectorAll('input[name="enhance"]').forEach(radio => {
+            radio.addEventListener('change', () => {
+                const info = document.getElementById('enhance-info');
+                if (info) {
+                    const text = enhanceInfoTexts[radio.value] || '';
+                    info.textContent = text;
+                    info.style.display = text ? 'block' : 'none';
+                }
+            });
+        });
     });
 
     function startPolling(projectId) {
@@ -83,7 +134,7 @@
             badge.innerHTML = `<span class="badge-dot"></span>${data.status_display}`;
         }
 
-        // Update progress bar
+        // Update progress bar + timer
         let progressBar = card.querySelector('.progress-bar');
         if (ACTIVE_STATUSES.has(data.status)) {
             const progressLabel = data.progress_message
@@ -91,7 +142,6 @@
                 : `${data.progress}%`;
 
             if (!progressBar) {
-                // Create clickable progress bar + message
                 const body = card.querySelector('.card-body');
                 const progressHtml = `
                     <div class="progress-bar" onclick="showProcessingLogs('${projectId}')" style="cursor:pointer;" title="Click for processing details">
@@ -99,7 +149,8 @@
                     </div>
                     <div class="progress-text" style="display:flex;justify-content:space-between;align-items:center;">
                         <span>${progressLabel}</span>
-                        <span style="font-size:0.7rem;color:var(--text-tertiary);cursor:pointer;" onclick="showProcessingLogs('${projectId}')">📋 View logs</span>
+                        <span id="timer-${projectId}" style="font-size:0.72rem;color:var(--accent-primary);font-family:'JetBrains Mono',monospace;font-weight:600;"></span>
+                        <span style="font-size:0.7rem;color:var(--text-tertiary);cursor:pointer;" onclick="showProcessingLogs('${projectId}')"><i data-lucide="file-text" class="inline-icon" style="width:14px;height:14px;margin-right:4px;"></i> View logs</span>
                     </div>
                 `;
                 body.insertAdjacentHTML('beforeend', progressHtml);
@@ -109,11 +160,28 @@
                 const text = card.querySelector('.progress-text span:first-child');
                 if (text) text.textContent = progressLabel;
             }
+            // Start/update client-side timer
+            if (data.processing_started_at && !cardTimers[projectId]) {
+                startCardTimer(projectId, data.processing_started_at);
+            }
         } else {
-            // Remove progress bar for completed/failed
+            stopCardTimer(projectId);
             if (progressBar) progressBar.remove();
             const progressText = card.querySelector('.progress-text');
             if (progressText) progressText.remove();
+
+            // Show total processing time for completed/failed projects
+            if (data.processing_duration && (data.status === 'completed' || data.status === 'failed')) {
+                let durationEl = card.querySelector('.processing-duration');
+                if (!durationEl) {
+                    durationEl = document.createElement('div');
+                    durationEl.className = 'processing-duration';
+                    durationEl.style.cssText = 'margin-top:6px;font-size:0.75rem;color:var(--text-tertiary);display:flex;align-items:center;gap:4px;';
+                    const body = card.querySelector('.card-body');
+                    if (body) body.appendChild(durationEl);
+                }
+                durationEl.innerHTML = `⏱ Processed in <strong style="color:var(--text-secondary);">${data.processing_duration}</strong>`;
+            }
         }
 
         // Update AI status info
@@ -128,13 +196,13 @@
             }
             const parts = [];
             if (data.status === 'analyzing') {
-                parts.push(`<span style="color:#818cf8">🤖 ${data.progress_message || 'AI analyzing...'}</span>`);
+                parts.push(`<span style="color:#818cf8"><i data-lucide="bot" style="width:20px;height:20px;margin-right:8px;"></i> ${data.progress_message || 'AI analyzing...'}</span>`);
             }
             if (data.annotation_count > 0) {
-                parts.push(`<span style="color:var(--text-tertiary)">📍 ${data.annotation_count} annotations</span>`);
+                parts.push(`<span style="color:var(--text-tertiary)"><i data-lucide="map-pin" style="width:14px;height:14px;margin-right:6px;"></i> ${data.annotation_count} annotations</span>`);
             }
             if (data.has_ai_report) {
-                parts.push(`<span style="color:#818cf8">📝 Report ready</span>`);
+                parts.push(`<span style="color:#818cf8"><i data-lucide="file-edit" class="inline-icon" style="width:16px;height:16px;"></i> Report ready</span>`);
             }
             aiInfo.innerHTML = parts.join('<span style="color:var(--border-default)">|</span>');
         }
@@ -145,31 +213,31 @@
             if (data.status === 'completed') {
                 footer.innerHTML = `
                     <a href="/viewer/${projectId}/" class="btn btn-primary btn-sm">
-                        🌐 View 3D Model
+                        <i data-lucide="globe" class="inline-icon" style="width:16px;height:16px;margin-right:6px;"></i> View 3D Model
                     </a>
                     <button class="btn btn-danger btn-sm" onclick="deleteProject('${projectId}', '${data.name}')">
-                        🗑
+                        <i data-lucide="trash-2" class="inline-icon" style="width:16px;height:16px;"></i>
                     </button>
                 `;
             } else if (ACTIVE_STATUSES.has(data.status)) {
                 footer.innerHTML = `
                     <button class="btn btn-secondary btn-sm" onclick="showProcessingLogs('${projectId}')">
-                        📋 Pipeline Status
+                        <i data-lucide="activity" class="inline-icon" style="width:16px;height:16px;margin-right:6px;"></i> Pipeline Status
                     </button>
                     <button class="btn btn-danger btn-sm" onclick="cancelProcessing('${projectId}', '${data.name}')">
-                        ✕ Cancel
+                        <i data-lucide="x" class="inline-icon" style="width:16px;height:16px;margin-right:6px;"></i> Cancel
                     </button>
                 `;
             } else if (data.status === 'failed') {
                 footer.innerHTML = `
                     <button class="btn btn-secondary btn-sm" onclick="openUploadPanel('${projectId}')">
-                        📤 Upload More
+                        <i data-lucide="upload-cloud" class="inline-icon" style="width:16px;height:16px;margin-right:6px;"></i> Upload More
                     </button>
                     <button class="btn btn-primary btn-sm" onclick="startProcessing('${projectId}')" id="btn-process-${projectId}">
-                        ▶ Retry Process
+                        <i data-lucide="refresh-cw" class="inline-icon" style="width:16px;height:16px;margin-right:6px;"></i> Retry Process
                     </button>
                     <button class="btn btn-danger btn-sm" onclick="deleteProject('${projectId}', '${data.name}')">
-                        🗑
+                        <i data-lucide="trash-2" class="inline-icon" style="width:16px;height:16px;"></i>
                     </button>
                 `;
                 // Show structured error panel
@@ -189,12 +257,12 @@
 
     // ── Error Panel Builder ─────────────────────────────
     const ERROR_ICONS = {
-        out_of_memory: '💾',
-        insufficient_images: '📸',
-        reconstruction_failed: '🔺',
-        georeferencing_failed: '🌐',
-        densification_failed: '💥',
-        mesh_failed: '🕸️',
+        out_of_memory: '<i data-lucide="save" style="width:14px;height:14px;margin-right:6px;"></i>',
+        insufficient_images: '<i data-lucide="camera" style="width:14px;height:14px;margin-right:6px;"></i>',
+        reconstruction_failed: '<i data-lucide="triangle" class="inline-icon" style="width:16px;height:16px;"></i>',
+        georeferencing_failed: '<i data-lucide="globe" class="inline-icon" style="width:16px;height:16px;"></i>',
+        densification_failed: '<i data-lucide="target" style="width:18px;height:18px;margin-right:8px;"></i>',
+        mesh_failed: '<i data-lucide="network" style="width:18px;height:18px;margin-right:8px;"></i>️',
         processing_error: '⚠️',
     };
 
@@ -225,7 +293,7 @@
                 </div>
                 <p style="color:#e5e7eb;margin:0 0 6px 0;">${detail.summary || fallbackMessage}</p>
                 <p style="color:#9ca3af;margin:0;font-size:0.78rem;">
-                    💡 ${detail.suggestion || 'Try re-running with a lower quality preset.'}
+                    <i data-lucide="lightbulb" class="inline-icon" style="width:14px;height:14px;"></i> ${detail.suggestion || 'Try re-running with a lower quality preset.'}
                 </p>`;
 
         if (meta.length > 0) {
@@ -354,6 +422,11 @@
             const lonInput = document.getElementById('approx-lon');
             if (latInput) latInput.value = '';
             if (lonInput) lonInput.value = '';
+            // Reset enhancement toggles
+            const enhanceOff = document.getElementById('enhance-off');
+            if (enhanceOff) enhanceOff.checked = true;
+            const enhanceInfo = document.getElementById('enhance-info');
+            if (enhanceInfo) { enhanceInfo.textContent = ''; enhanceInfo.style.display = 'none'; }
             // Reset advanced config
             resetAdvancedConfig();
         }
@@ -380,6 +453,13 @@
         // Collect optional approximate location
         const locationToggle = document.getElementById('approx-location-toggle');
         const body = { name, quality_preset: quality };
+
+        // AI Enhancement mode
+        const enhanceRadio = document.querySelector('input[name="enhance"]:checked');
+        const enhanceMode = enhanceRadio ? enhanceRadio.value : 'off';
+        if (enhanceMode !== 'off') {
+            body.ai_enhance_mode = enhanceMode;
+        }
 
         if (locationToggle && locationToggle.checked) {
             const latInput = document.getElementById('approx-lat');
@@ -452,10 +532,10 @@
                 if (footer) {
                     footer.innerHTML = `
                         <button class="btn btn-secondary btn-sm" onclick="showProcessingLogs('${projectId}')">
-                            📋 Pipeline Status
+                            <i data-lucide="activity" class="inline-icon" style="width:16px;height:16px;margin-right:6px;"></i> Pipeline Status
                         </button>
                         <button class="btn btn-danger btn-sm" onclick="cancelProcessing('${projectId}')">
-                            ✕ Cancel
+                            <i data-lucide="x" class="inline-icon" style="width:16px;height:16px;margin-right:6px;"></i> Cancel
                         </button>
                     `;
                 }
@@ -507,14 +587,17 @@
                 <div class="logs-modal-backdrop" onclick="closeProcessingLogs()"></div>
                 <div class="logs-modal-content">
                     <div class="logs-modal-header">
-                        <h3>⚙️ Processing Pipeline</h3>
+                        <div style="display:flex;align-items:center;gap:12px;">
+                            <h3 style="margin:0;">⚙️ Processing Pipeline</h3>
+                            <span id="logs-timer" style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:var(--accent-primary);font-weight:600;"></span>
+                        </div>
                         <button class="logs-modal-close" onclick="closeProcessingLogs()">✕</button>
                     </div>
                     <div class="logs-modal-body">
                         <div id="pipeline-steps" class="pipeline-steps"></div>
                         <div class="logs-section">
                             <div class="logs-section-header">
-                                <span>📋 NodeODM Console Output</span>
+                                <span><i data-lucide="clipboard" class="inline-icon" style="width:14px;height:14px;"></i> NodeODM Console Output</span>
                                 <label class="logs-autoscroll">
                                     <input type="checkbox" id="logs-autoscroll-check" checked> Auto-scroll
                                 </label>
@@ -523,8 +606,8 @@
                         </div>
                     </div>
                     <div class="logs-modal-footer">
-                        <button class="btn btn-secondary btn-sm" onclick="refreshLogs('${projectId}')">🔄 Refresh</button>
-                        <button class="btn btn-danger btn-sm" onclick="cancelProcessing('${projectId}'); closeProcessingLogs();">✕ Cancel Job</button>
+                        <button class="btn btn-secondary btn-sm" onclick="refreshLogs('${projectId}')"><i data-lucide="refresh-cw" style="width:14px;height:14px;margin-right:6px;"></i> Refresh</button>
+                        <button class="btn btn-danger btn-sm" onclick="cancelProcessing('${projectId}'); closeProcessingLogs();"><i data-lucide="x" class="inline-icon" style="width:16px;height:16px;margin-right:6px;"></i> Cancel Job</button>
                     </div>
                 </div>
             `;
@@ -547,13 +630,53 @@
         modal.classList.add('active');
         document.body.style.overflow = 'hidden';
 
+        // Fetch status for elapsed timer
+        try {
+            const statusData = await apiFetch(`/api/projects/${projectId}/status/`);
+            _updateLogsTimer(statusData);
+        } catch (e) {}
+
         // Fetch and display logs
         await refreshLogs(projectId);
 
         // Start auto-refresh every 3 seconds
         if (logRefreshTimer) clearInterval(logRefreshTimer);
         logRefreshTimer = setInterval(() => refreshLogs(projectId), 3000);
+
+        // Start client-side timer for logs modal
+        _startLogsTimer(projectId);
     };
+
+    let _logsTimerInterval = null;
+    function _startLogsTimer(projectId) {
+        if (_logsTimerInterval) clearInterval(_logsTimerInterval);
+        // We'll use the status endpoint to get the start time once
+        apiFetch(`/api/projects/${projectId}/status/`).then(data => {
+            if (!data.processing_started_at) return;
+            const startedAt = new Date(data.processing_started_at).getTime();
+            const tick = () => {
+                const el = document.getElementById('logs-timer');
+                if (!el) { clearInterval(_logsTimerInterval); return; }
+                if (data.completed_at) {
+                    // Show final duration
+                    el.textContent = `⏱ ${data.processing_duration || ''}`;
+                    clearInterval(_logsTimerInterval);
+                } else {
+                    const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+                    el.textContent = `⏱ ${formatElapsed(elapsed)}`;
+                }
+            };
+            tick();
+            _logsTimerInterval = setInterval(tick, 1000);
+        }).catch(() => {});
+    }
+
+    function _updateLogsTimer(data) {
+        const el = document.getElementById('logs-timer');
+        if (el && data.processing_duration) {
+            el.textContent = `⏱ ${data.processing_duration}`;
+        }
+    }
 
     window.refreshLogs = async function (projectId) {
         try {
@@ -563,7 +686,7 @@
             const stepsEl = document.getElementById('pipeline-steps');
             if (stepsEl && data.steps) {
                 stepsEl.innerHTML = data.steps.map(step => {
-                    const icons = { done: '✅', active: '🔄', pending: '⏳' };
+                    const icons = { done: '<i data-lucide="check-circle" style="width:14px;height:14px;text-align:center;"></i>', active: '<i data-lucide="refresh-cw" style="width:14px;height:14px;margin-right:6px;"></i>', pending: '⏳' };
                     const icon = icons[step.status] || '⏳';
                     const activeClass = step.status === 'active' ? ' step-active' : '';
                     const doneClass = step.status === 'done' ? ' step-done' : '';
@@ -614,6 +737,10 @@
         if (logRefreshTimer) {
             clearInterval(logRefreshTimer);
             logRefreshTimer = null;
+        }
+        if (_logsTimerInterval) {
+            clearInterval(_logsTimerInterval);
+            _logsTimerInterval = null;
         }
     };
 

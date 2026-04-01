@@ -13,3 +13,7 @@ python-decouple>=3.8,<4
 lxml>=5.0,<6
 httpx>=0.27,<1
 scipy>=1.12,<2
+# Mesh post-processing (hole filling, repair)
+pymeshlab>=2023.12,<2024
+# AI Image Enhancement (Super-Resolution)
+onnxruntime>=1.17,<2

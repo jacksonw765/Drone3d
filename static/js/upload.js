@@ -27,9 +27,9 @@
     };
 
     const FILE_ICONS = {
-        image: { class: 'file-icon-image', emoji: '🖼' },
-        video: { class: 'file-icon-video', emoji: '🎬' },
-        srt: { class: 'file-icon-srt', emoji: '📍' },
+        image: { class: 'file-icon-image', emoji: '<i data-lucide="image" style="width:14px;height:14px;margin-right:6px;"></i>' },
+        video: { class: 'file-icon-video', emoji: '<i data-lucide="clapperboard" style="width:14px;height:14px;margin-right:6px;"></i>' },
+        srt: { class: 'file-icon-srt', emoji: '<i data-lucide="map-pin" style="width:14px;height:14px;margin-right:6px;"></i>' },
     };
 
     // ── Initialization ──────────────────────────────────
@@ -108,7 +108,7 @@
         const list = document.getElementById('file-list');
         if (!list) return;
 
-        const icon = FILE_ICONS[type] || { class: '', emoji: '📄' };
+        const icon = FILE_ICONS[type] || { class: '', emoji: '<i data-lucide="file" style="width:14px;height:14px;margin-right:6px;"></i>' };
         const fileId = `file-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
 
         const item = document.createElement('div');

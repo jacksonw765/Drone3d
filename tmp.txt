@@ -1,0 +1,494 @@
+[2026-03-31 01:49:21,991] INFO processing ResourceManager: preparing memory for NodeODM processing
+[2026-03-31 01:49:22,033] INFO processing ResourceManager: ready for processing (freed 0 model(s), 0 task(s))
+[2026-03-31 01:49:22,042] INFO processing Project building: input type = mixed
+[2026-03-31 01:49:22,242] INFO processing Video probe: 3840x2160 @ 59.9fps, 114.5s, ~6861 frames, codec=hevc, rotation=0°
+[2026-03-31 01:49:22,242] INFO processing FPS calculation: 114.5s video, target=90 frames, ideal=0.8fps, clamped=2.0fps → ~228 frames
+[2026-03-31 01:49:22,242] INFO processing Extracting from 3840x2160 video: fps=2.0, expected ~228 frames, max=150, preset=high
+[2026-03-31 01:49:22,242] INFO processing Extracting frames: ffmpeg -i /app/media/uploads/e8b3615b-efa7-4949-9cc2-cc93cceb154b/DJI_20240623140152_0035_D.MP4 -vf fps=2.0 -vframes 150 -q:v 1 -qmin 1 -y /app/media/uploads/e8b3615b-efa7-4949-9cc2-cc93cceb154b/frames_fa1a77e0-2474-4f46-ad20-498c05253fa7/frame_%05d.jpg
+[2026-03-31 01:49:29,076] INFO ai_analysis Sliced /app/media/outputs/f90dbe30-d885-4263-b420-6c1ddcded666/odm_orthophoto/odm_orthophoto.tif into 205 tiles (512px, 15% overlap)
+[2026-03-31 01:50:38,161] WARNING ai_analysis Failed to parse structured output: Expecting ',' delimiter: line 11 column 176 (char 919)
+Raw: [
+
+  {"label": "Road", "category": "road", "relative_position": [ 0.5, 0.5 ], "confidence": 1.0, "description": "A paved road running through the center of the image.", "size_estimate": 10.0 },
+
+  {"label": "Vegetation", "category": "vegetation", "relative_position": [ 0.0, 0.0 ], "confidence": 1.0, "description": "A field of tall grass and trees.", "size_estimate": 50.0 },
+
+  {"label": "Vegetation", "category": "vegetation", "relative_position": [ 0.5, 0.0 ], "confidence": 1.0, "description": "
+[2026-03-31 01:50:38,162] WARNING ai_analysis Tile analysis failed: Expecting ',' delimiter: line 11 column 176 (char 919)
+[2026-03-31 01:50:50,323] INFO processing Raw extraction: 150 frames from /app/media/uploads/e8b3615b-efa7-4949-9cc2-cc93cceb154b/DJI_20240623140152_0035_D.MP4
+[2026-03-31 01:50:58,576] INFO processing Sharpness filtering: 150 → 120 frames (discarded 30 blurry). Score range: 5209.8–6194.4, kept min: 5360.6
+[2026-03-31 01:50:58,581] INFO processing Final frame count: 120 (from 150 raw, high preset)
+[2026-03-31 01:50:58,786] INFO processing Starting standard enhancement on 129 images for building
+[2026-03-31 01:54:08,758] INFO processing Enhanced 129 images (mode=standard): 129 modified
+[2026-03-31 01:54:08,983] INFO processing Enhancement complete: 129/129 images enhanced (standard) for building
+[2026-03-31 01:54:08,993] INFO processing Submitting 330 images to NodeODM for project building
+[2026-03-31 01:54:08,994] INFO processing Applied 11 user ODM overrides for project building: {'pc-quality': 'medium', 'feature-quality': 'high', 'mesh-octree-depth': 10, 'use-3dmesh': True, 'max-concurrency': 12, 'split': 200, 'split-overlap': 75, '3d-tiles': True, 'matcher-type': 'bow', 'min-num-features': 12000, 'skip-orthophoto': True}
+[2026-03-31 01:54:08,994] INFO processing Enforced max-concurrency=12 from preset
+[2026-03-31 01:54:08,994] INFO processing No GPS data found in any sampled images
+[2026-03-31 01:54:08,994] INFO processing No GPS metadata detected for project building. Disabling geo-dependent outputs (orthophoto, DSM, DTM) and enabling non-georeferenced processing.
+[2026-03-31 01:54:11,504] INFO processing NodeODM task created: ddac0bc0-5bef-49cd-b5d0-730a3b8b1210
+[2026-03-31 01:55:09,290] WARNING ai_analysis Failed to parse structured output: Invalid control character at: line 1 column 122 (char 121)
+Raw: [{"label":"Building","category":"structure","relative_position":[0.4,0.7],"confidence":0.8,"description":"Potential enemy
+  base","size_estimate":50.0}]
+
+[{"label":"Tree","category":"vegetation","relative_position":[0.2,0.3],"confidence":0.9,"description":"Hiding
+  spot","size_estimate":5.0}]
+
+[{"label":"Road","category":"road","relative_position":[0.6,0.5],"confidence":0.7,"description":"T
+  o  [  [  [  [
+[2026-03-31 01:55:09,291] WARNING ai_analysis Tile analysis failed: Invalid control character at: line 1 column 122 (char 121)
+[2026-03-31 02:00:49,364] WARNING processing Could not cancel NodeODM task: ddac0bc0-5bef-49cd-b5d0-730a3b8b1210 not found
+[2026-03-31 02:00:49,402] INFO processing Revoked Celery task 32e886e6-c693-474e-824c-f0c8d43c8440
+[2026-03-31 02:00:49,404] INFO processing User canceled processing for building
+[2026-03-31 02:00:52,720] INFO processing Queued deletion of project building
+[2026-03-31 02:00:52,797] INFO processing Deleted upload dir: /app/media/uploads/e8b3615b-efa7-4949-9cc2-cc93cceb154b
+[2026-03-31 02:00:52,807] INFO processing Deleted output dir: /app/media/outputs/e8b3615b-efa7-4949-9cc2-cc93cceb154b
+[2026-03-31 02:00:52,815] INFO processing Deleted project e8b3615b-efa7-4949-9cc2-cc93cceb154b
+[2026-03-31 02:01:05,579] INFO processing Created project 'buulding' (b1be4859-2b64-4d3e-a5ce-c5f8a6be7405)
+[2026-03-31 02:01:10,379] INFO processing Uploaded DJI_20240623150502_0071_D.mp4 (video) to project buulding
+[2026-03-31 02:01:14,215] INFO processing Queued processing for project buulding (task: f5101e33-6063-4161-9d2b-4fd17952c446)
+[2026-03-31 02:01:14,231] INFO processing ResourceManager: preparing memory for NodeODM processing
+[2026-03-31 02:01:14,270] INFO processing ResourceManager: ready for processing (freed 0 model(s), 0 task(s))
+[2026-03-31 02:01:14,274] INFO processing Project buulding: input type = video
+[2026-03-31 02:01:14,358] INFO processing Video probe: 1920x1080 @ 59.9fps, 42.2s, ~2531 frames, codec=h264, rotation=0°
+[2026-03-31 02:01:14,358] INFO processing FPS calculation: 42.2s video, target=100 frames, ideal=2.4fps, clamped=2.4fps → ~99 frames
+[2026-03-31 02:01:14,358] INFO processing Extracting from 1920x1080 video: fps=2.4, expected ~99 frames, max=160, preset=medium
+[2026-03-31 02:01:14,358] INFO processing Extracting frames: ffmpeg -i /app/media/uploads/b1be4859-2b64-4d3e-a5ce-c5f8a6be7405/DJI_20240623150502_0071_D.mp4 -vf fps=2.3673009454999976 -vframes 160 -q:v 1 -qmin 1 -y /app/media/uploads/b1be4859-2b64-4d3e-a5ce-c5f8a6be7405/frames_8854af17-f136-4577-afec-2f9ef5e61585/frame_%05d.jpg
+[2026-03-31 02:01:16,109] INFO processing Raw extraction: 100 frames from /app/media/uploads/b1be4859-2b64-4d3e-a5ce-c5f8a6be7405/DJI_20240623150502_0071_D.mp4
+[2026-03-31 02:01:17,558] INFO processing Sharpness filtering: 100 → 85 frames (discarded 15 blurry). Score range: 4994.6–6703.0, kept min: 5715.5
+[2026-03-31 02:01:17,558] INFO processing Final frame count: 85 (from 100 raw, medium preset)
+[2026-03-31 02:01:17,663] INFO processing Starting standard enhancement on 85 images for buulding
+[2026-03-31 02:01:46,754] INFO processing Enhanced 85 images (mode=standard): 85 modified
+[2026-03-31 02:01:46,862] INFO processing Enhancement complete: 85/85 images enhanced (standard) for buulding
+[2026-03-31 02:01:46,864] INFO processing Submitting 85 images to NodeODM for project buulding
+[2026-03-31 02:01:46,864] INFO processing Applied video ODM overrides for project buulding: {'matcher-type': 'flann', 'min-num-features': 16000}
+[2026-03-31 02:01:46,864] INFO processing Enforced max-concurrency=12 from preset
+[2026-03-31 02:01:46,865] INFO processing No GPS data found in any sampled images
+[2026-03-31 02:01:46,865] INFO processing No GPS metadata detected for project buulding. Disabling geo-dependent outputs (orthophoto, DSM, DTM) and enabling non-georeferenced processing.
+[2026-03-31 02:01:47,143] INFO processing NodeODM task created: b307de3b-ce18-4a83-b350-385ee606e2d8
+[2026-03-31 02:02:44,671] INFO processing Created project 'glen' (33ab5ef8-f581-47be-b010-30d379ea597e)
+[2026-03-31 02:02:55,043] INFO processing Uploaded DJI_20240623140609_0038_D.jpg (image) to project glen
+[2026-03-31 02:02:55,091] INFO processing Uploaded DJI_20240623140635_0039_D.jpg (image) to project glen
+[2026-03-31 02:02:55,146] INFO processing Uploaded DJI_20240623140045_0032_D.jpg (image) to project glen
+[2026-03-31 02:02:55,205] INFO processing Uploaded DJI_20240623135854_0025_D.jpg (image) to project glen
+[2026-03-31 02:02:55,272] INFO processing Uploaded DJI_20240623135841_0024_D.jpg (image) to project glen
+[2026-03-31 02:02:55,328] INFO processing Uploaded DJI_20240623135859_0026_D.jpg (image) to project glen
+[2026-03-31 02:02:55,381] INFO processing Uploaded DJI_20240623135917_0028_D.jpg (image) to project glen
+[2026-03-31 02:02:55,444] INFO processing Uploaded DJI_20240623140609_0037_D.jpg (image) to project glen
+[2026-03-31 02:02:55,499] INFO processing Uploaded DJI_20240623135822_0021_D.jpg (image) to project glen
+[2026-03-31 02:02:55,557] INFO processing Uploaded DJI_20240623140655_0040_D.jpg (image) to project glen
+[2026-03-31 02:02:55,612] INFO processing Uploaded DJI_20240623140609_0036_D.jpg (image) to project glen
+[2026-03-31 02:02:55,659] INFO processing Uploaded DJI_20240623140003_0030_D.jpg (image) to project glen
+[2026-03-31 02:02:55,710] INFO processing Uploaded DJI_20240623135836_0023_D.jpg (image) to project glen
+[2026-03-31 02:02:55,759] INFO processing Uploaded DJI_20240623140008_0031_D.jpg (image) to project glen
+[2026-03-31 02:02:55,811] INFO processing Uploaded DJI_20240623135827_0022_D.jpg (image) to project glen
+[2026-03-31 02:02:55,857] INFO processing Uploaded DJI_20240623140717_0041_D.jpg (image) to project glen
+[2026-03-31 02:02:55,906] INFO processing Uploaded DJI_20240623135950_0029_D.jpg (image) to project glen
+[2026-03-31 02:02:55,965] INFO processing Uploaded DJI_20240623140049_0033_D.jpg (image) to project glen
+[2026-03-31 02:02:56,025] INFO processing Uploaded DJI_20240623135910_0027_D.jpg (image) to project glen
+[2026-03-31 02:02:56,083] INFO processing Uploaded DJI_20240623135818_0020_D.jpg (image) to project glen
+[2026-03-31 02:03:14,708] INFO processing Uploaded DJI_20240623140152_0035_D.MP4 (video) to project glen
+[2026-03-31 02:03:33,831] INFO processing Queued processing for project glen (task: eeb90686-c2cd-45b0-b2a2-2d0ec8254e9c)
+[2026-03-31 02:03:33,845] INFO processing ResourceManager: preparing memory for NodeODM processing
+[2026-03-31 02:03:33,880] INFO processing ResourceManager: ready for processing (freed 0 model(s), 0 task(s))
+[2026-03-31 02:03:33,884] INFO processing Project glen: input type = mixed
+[2026-03-31 02:03:33,925] INFO processing Video probe: 3840x2160 @ 59.9fps, 114.5s, ~6861 frames, codec=hevc, rotation=0°
+[2026-03-31 02:03:33,925] INFO processing FPS calculation: 114.5s video, target=100 frames, ideal=0.9fps, clamped=2.0fps → ~228 frames
+[2026-03-31 02:03:33,925] INFO processing Extracting from 3840x2160 video: fps=2.0, expected ~228 frames, max=160, preset=medium
+[2026-03-31 02:03:33,925] INFO processing Extracting frames: ffmpeg -i /app/media/uploads/33ab5ef8-f581-47be-b010-30d379ea597e/DJI_20240623140152_0035_D.MP4 -vf fps=2.0 -vframes 160 -q:v 1 -qmin 1 -y /app/media/uploads/33ab5ef8-f581-47be-b010-30d379ea597e/frames_cdcaf78b-8be9-423d-b4ba-595c107dad6d/frame_%05d.jpg
+[2026-03-31 02:30:15,494] INFO ai_analysis Stitched 4 views into 1024x1024 composite
+[2026-03-31 02:32:26,141] INFO processing Canceled NodeODM task b307de3b-ce18-4a83-b350-385ee606e2d8
+[2026-03-31 02:32:26,186] INFO processing Revoked Celery task f5101e33-6063-4161-9d2b-4fd17952c446
+[2026-03-31 02:32:26,189] INFO processing User canceled processing for buulding
+[2026-03-31 02:34:24,837] INFO processing Revoked Celery task eeb90686-c2cd-45b0-b2a2-2d0ec8254e9c
+[2026-03-31 02:34:24,842] INFO processing User canceled processing for glen
+[2026-03-31 02:34:27,758] INFO processing Queued processing for project glen (task: f0abcc8e-38be-4727-8eb1-daecf75ed81a)
+[2026-03-31 02:34:27,792] INFO processing ResourceManager: preparing memory for NodeODM processing
+[2026-03-31 02:34:27,838] INFO processing ResourceManager: unloaded model 'llama3.2-vision:11b' from memory
+[2026-03-31 02:34:27,838] INFO processing ResourceManager: freed Ollama memory (1 model(s) unloaded)
+[2026-03-31 02:34:27,894] INFO processing ResourceManager: freed NodeODM memory (1 task(s) removed)
+[2026-03-31 02:34:29,895] INFO processing ResourceManager: ready for processing (freed 1 model(s), 1 task(s))
+[2026-03-31 02:34:29,911] INFO processing Project glen: input type = mixed
+[2026-03-31 02:34:29,985] INFO processing Video probe: 3840x2160 @ 59.9fps, 114.5s, ~6861 frames, codec=hevc, rotation=0°
+[2026-03-31 02:34:29,986] INFO processing FPS calculation: 114.5s video, target=100 frames, ideal=0.9fps, clamped=2.0fps → ~228 frames
+[2026-03-31 02:34:29,986] INFO processing Extracting from 3840x2160 video: fps=2.0, expected ~228 frames, max=160, preset=medium
+[2026-03-31 02:34:29,986] INFO processing Extracting frames: ffmpeg -i /app/media/uploads/33ab5ef8-f581-47be-b010-30d379ea597e/DJI_20240623140152_0035_D.MP4 -vf fps=2.0 -vframes 160 -q:v 1 -qmin 1 -y /app/media/uploads/33ab5ef8-f581-47be-b010-30d379ea597e/frames_cdcaf78b-8be9-423d-b4ba-595c107dad6d/frame_%05d.jpg
+[2026-03-31 02:35:51,927] INFO processing Raw extraction: 160 frames from /app/media/uploads/33ab5ef8-f581-47be-b010-30d379ea597e/DJI_20240623140152_0035_D.MP4
+[2026-03-31 02:35:59,696] INFO processing Sharpness filtering: 160 → 136 frames (discarded 24 blurry). Score range: 5144.0–6194.4, kept min: 5280.2
+[2026-03-31 02:35:59,699] INFO processing Final frame count: 136 (from 160 raw, medium preset)
+[2026-03-31 02:35:59,868] INFO processing Starting standard enhancement on 156 images for glen
+[2026-03-31 02:38:16,292] INFO ai_analysis Stitched 4 views into 1024x1024 composite
+[2026-03-31 02:41:20,220] INFO processing Enhanced 156 images (mode=standard): 156 modified
+[2026-03-31 02:41:20,411] INFO processing Enhancement complete: 156/156 images enhanced (standard) for glen
+[2026-03-31 02:41:20,418] INFO processing Submitting 156 images to NodeODM for project glen
+[2026-03-31 02:41:20,418] INFO processing Enforced max-concurrency=12 from preset
+[2026-03-31 02:41:20,418] INFO processing GPS data found in DJI_20240623140049_0033_D_enhanced.jpg
+[2026-03-31 02:41:21,955] INFO processing NodeODM task created: 4b0b0c23-143f-488a-bfd3-a4be4ce3b329
+[2026-03-31 02:50:36,661] INFO ai_analysis Orthophoto found, using tile-based analysis for Test3
+[2026-03-31 02:50:43,145] INFO ai_analysis Sliced /app/media/outputs/f90dbe30-d885-4263-b420-6c1ddcded666/odm_orthophoto/odm_orthophoto.tif into 205 tiles (512px, 15% overlap)
+[2026-03-31 02:56:44,070] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Building","category":"structure","relative_position":[0.3,0.5],"confidence":0.8,"description":"Potential enemy
+  position","size_estimate":10.0}]
+
+[{"label":"Tree","category":"vegetation","relative_position":[0.7,0.2],"confidence":0.9,"description":"Hiding
+  place","size_estimate":5.0}]
+
+[{"label":"Road","category":"road","relative_position":[0.5,0.8],"confidence":0.7,"description":"E
+  viction route","size_estimate":20.0}]
+
+[{"label":"Cle
+  r
+  e
+  d
+  A
+  r
+  e
+  t
+  e
+  r
+  e
+  n
+ 
+[2026-03-31 02:59:11,390] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Building","category":"structure","relative_position":[0.3,0.5],"confidence":0.8,"description":"Potential
+  target for
+  [in
+  [in
+[2026-03-31 02:59:43,443] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Pit","category":"obstacle","relative_position":[0.33,0.33],"confidence":0.8,"description":"Pit in the ground, likely a  [  ]  [  ]
+[2026-03-31 03:00:09,500] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Tree","category":"vegetation","relative_position":[0.5,0.7],"confidence":0.8,"description":"A single tree with a trunk and branches, likely a
+  tree  —  tree  —
+[2026-03-31 03:02:33,371] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Building","category":"structure","relative_position":[0.4,0.7],"confidence":0.8,"description":"Potential
+  target  for  f
+[2026-03-31 03:05:03,287] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Cleared Area","category":"cleared_area","relative_position":[0.5,0.5],"confidence":0.8,"description":"A cleared area for a potential landing or
+  [“Cle
+  [“C
+  [“C
+[2026-03-31 03:05:12,079] WARNING ai_analysis Tile 39 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 03:05:20,485] WARNING ai_analysis Tile 40 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 03:07:52,331] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Two-story residential building","category":"structure","relative_position":[0.25,0.75],"confidence":0.9,"description":"Potential
+  target  for  re  …  …  …  …
+[2026-03-31 03:07:59,866] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Two-story residential building","category":"structure","relative_position":[0.25,0.75],"confidence":0.8,"description":"Potential
+  target  for  f
+[2026-03-31 03:08:24,401] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Landing Zone","category":"landing_zone","relative_position":[0.5,0.5],"confidence":0.8,"description":"A small, flat area with no vegetation or obstacles, suitable for landing or
+  [“Landing  [“L  [“L  [“L
+[2026-03-31 03:10:58,230] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Tree","category":"vegetation","relative_position":[0.5,0.7],"confidence":0.8,"description":"A single tree with a trunk diameter of 10-15cm, located in a clearing","size_estimate":5.0,"_id":1,"_v":1,"_k":1,"_s":1,"_f":1,"_c":1,"_i":1,"_d":1,"_r":1,"_p":1,"_m":1,"_l":1,"_o":1,"_e":1,"_t":1,"_u":1,"_i_":1,"_a":1,"_s_":1,"_p_":1,"_r_":1,"_m_":1,"_l_":1,"_o_":1,"_e_":1,"_t_":1,"_u_":1,"_i_":1,"_a_
+[2026-03-31 03:11:05,657] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Tree","category":"vegetation","relative_position":[0.5,0.7],"confidence":0.8,"description":"Tall, single-branching tree with a large, flat-branching
+[2026-03-31 03:11:15,928] WARNING ai_analysis Tile 49 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 03:11:30,469] WARNING ai_analysis Tile 51 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 03:13:50,409] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Vehicle","category":"vehicle","relative_position":[0.5,0.7],"confidence":0.8,"description":"A vehicle is seen on the road, possibly a car or a truck, with a clear view of the road and surrounding environment. The vehicle is located in the center of the image, with the road running through it. The vehicle is a good target for a
+  [“…”, “…”, “…”, “…”]…,”…”, “…”,”…”, “…”
+[2026-03-31 03:16:22,399] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Two-story residential building","category":"structure","relative_position":[0.5,0.7],"confidence":0.8,"description":"Potential target for
+  [  ]  [  ]
+[2026-03-31 03:18:35,031] WARNING ai_analysis Tile 56 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 03:18:43,056] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Landing Zone","category":"landing_zone","relative_position":[0.5,0.7],"confidence":0.8,"description":"A flat, open area with no obstacles or vegetation, suitable for landing and/or
+  re-
+[2026-03-31 03:21:05,134] WARNING ai_analysis Tile 59 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 03:21:12,083] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Two-story residential building","category":"structure","relative_position":[0.5,0.7],"confidence":0.8,"description":"Potential target for
+  re-
+[2026-03-31 03:21:40,444] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Building","category":"structure","relative_position":[0.5,0.7],"confidence":0.8,"description":"Potential target for
+  [  ]  [  ]
+[2026-03-31 03:22:38,880] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Bicycle","category":"vehicle","relative_position":[0.4,0.7],"confidence":0.8,"description":"Bicycle in a field, possibly a bike- or  –  –  –  –
+[2026-03-31 03:22:59,613] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Two-story residential building","category":"structure","relative_position":[0.5,0.7],"confidence":0.9,"description":"Potential
+  target  for  re
+[2026-03-31 03:23:07,540] WARNING ai_analysis Tile 69 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 03:23:15,423] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Two-story residential building","category":"structure","relative_position":[0.5,0.7],"confidence":0.9,"description":"Potential target for
+  re-  [
+[2026-03-31 03:24:55,680] INFO processing Full NodeODM console output saved to /app/data/logs/nodeodm_glen_33ab5ef8.log (14970 lines)
+[2026-03-31 03:24:55,685] INFO processing NodeODM task 4b0b0c23-143f-488a-bfd3-a4be4ce3b329 completed
+[2026-03-31 03:24:55,687] INFO processing Downloading results to /app/media/outputs/33ab5ef8-f581-47be-b010-30d379ea597e
+[2026-03-31 03:24:56,212] INFO processing Downloaded zip: /app/media/outputs/33ab5ef8-f581-47be-b010-30d379ea597e/4b0b0c23-143f-488a-bfd3-a4be4ce3b329_1774927495_all.zip
+[2026-03-31 03:24:56,214] INFO processing Extracting results to /app/media/outputs/33ab5ef8-f581-47be-b010-30d379ea597e
+[2026-03-31 03:24:56,216] INFO processing Zip contains 96 entries. First 20: ['cameras.json', 'entwine_pointcloud/', 'entwine_pointcloud/ept-build.json', 'entwine_pointcloud/ept-data/', 'entwine_pointcloud/ept-data/0-0-0-0.laz', 'entwine_pointcloud/ept-data/1-0-0-1.laz', 'entwine_pointcloud/ept-data/1-0-1-1.laz', 'entwine_pointcloud/ept-data/1-1-1-1.laz', 'entwine_pointcloud/ept-data/2-1-1-2.laz', 'entwine_pointcloud/ept-data/2-1-1-3.laz', 'entwine_pointcloud/ept-data/2-1-2-2.laz', 'entwine_pointcloud/ept-data/2-1-2-3.laz', 'entwine_pointcloud/ept-data/2-1-3-3.laz', 'entwine_pointcloud/ept-data/3-2-3-5.laz', 'entwine_pointcloud/ept-data/3-2-3-6.laz', 'entwine_pointcloud/ept-data/3-2-4-6.laz', 'entwine_pointcloud/ept-data/3-2-4-7.laz', 'entwine_pointcloud/ept-data/3-2-5-6.laz', 'entwine_pointcloud/ept-data/3-2-5-7.laz', 'entwine_pointcloud/ept-data/3-3-4-5.laz']
+[2026-03-31 03:24:56,411] INFO processing   OUTPUT FILE: ./cameras.json
+[2026-03-31 03:24:56,411] INFO processing   OUTPUT FILE: ./log.json
+[2026-03-31 03:24:56,411] INFO processing   OUTPUT FILE: ./images.json
+[2026-03-31 03:24:56,411] INFO processing   OUTPUT FILE: ./task_output.txt
+[2026-03-31 03:24:56,411] INFO processing   OUTPUT FILE: odm_georeferencing/odm_georeferenced_model.info.json
+[2026-03-31 03:24:56,411] INFO processing   OUTPUT FILE: odm_georeferencing/odm_georeferenced_model.bounds.gpkg
+[2026-03-31 03:24:56,411] INFO processing   OUTPUT FILE: odm_georeferencing/proj.txt
+[2026-03-31 03:24:56,411] INFO processing   OUTPUT FILE: odm_georeferencing/odm_georeferenced_model.summary.json
+[2026-03-31 03:24:56,411] INFO processing   OUTPUT FILE: odm_georeferencing/odm_georeferenced_model.bounds.geojson
+[2026-03-31 03:24:56,411] INFO processing   OUTPUT FILE: odm_georeferencing/coords.txt
+[2026-03-31 03:24:56,411] INFO processing   OUTPUT FILE: odm_georeferencing/odm_georeferencing_model_geo.txt
+[2026-03-31 03:24:56,411] INFO processing   OUTPUT FILE: odm_georeferencing/odm_georeferenced_model.boundary.json
+[2026-03-31 03:24:56,411] INFO processing   OUTPUT FILE: odm_georeferencing/odm_georeferenced_model.laz
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: odm_dem/dsm.tif
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: odm_texturing/odm_textured_model_geo_material0020_map_Kd.png
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: odm_texturing/odm_textured_model_geo.obj
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: odm_texturing/odm_textured_model_geo_material0018_map_Kd.png
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: odm_texturing/odm_textured_model_geo.mtl
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: odm_texturing/odm_textured_model_geo_material0013_map_Kd.png
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: odm_texturing/odm_textured_model_geo_material0011_map_Kd.png
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: odm_texturing/odm_textured_model_geo_material0026_map_Kd.png
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: odm_texturing/odm_textured_model_geo_material0000_map_Kd.png
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: odm_texturing/odm_textured_model_geo_material0001_map_Kd.png
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: odm_texturing/odm_textured_model_geo_material0025_map_Kd.png
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: entwine_pointcloud/ept.json
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: entwine_pointcloud/ept-build.json
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: entwine_pointcloud/ept-data/2-1-1-3.laz
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: entwine_pointcloud/ept-data/3-2-5-6.laz
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: entwine_pointcloud/ept-data/2-1-3-3.laz
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: entwine_pointcloud/ept-data/4-5-11-14.laz
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: entwine_pointcloud/ept-data/3-3-4-5.laz
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: entwine_pointcloud/ept-data/4-4-9-15.laz
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: entwine_pointcloud/ept-data/3-3-5-6.laz
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: entwine_pointcloud/ept-data/3-2-3-5.laz
+[2026-03-31 03:24:56,412] INFO processing   OUTPUT FILE: entwine_pointcloud/ept-data/2-1-2-3.laz
+[2026-03-31 03:24:56,413] INFO processing   OUTPUT FILE: entwine_pointcloud/ept-data/2-1-1-2.laz
+[2026-03-31 03:24:56,413] INFO processing   OUTPUT FILE: entwine_pointcloud/ept-sources/odm_georeferenced_model.json
+[2026-03-31 03:24:56,413] INFO processing   OUTPUT FILE: entwine_pointcloud/ept-sources/manifest.json
+[2026-03-31 03:24:56,413] INFO processing   OUTPUT FILE: entwine_pointcloud/ept-hierarchy/0-0-0-0.json
+[2026-03-31 03:24:56,413] INFO processing   OUTPUT FILE: odm_orthophoto/odm_orthophoto.tif
+[2026-03-31 03:24:56,413] INFO processing   OUTPUT FILE: odm_orthophoto/odm_orthophoto_extent.dxf
+[2026-03-31 03:24:56,413] INFO processing   OUTPUT FILE: odm_orthophoto/odm_orthophoto.tfw
+[2026-03-31 03:24:56,413] INFO processing   OUTPUT FILE: odm_report/camera_mappings.npz
+[2026-03-31 03:24:56,413] INFO processing   OUTPUT FILE: odm_report/report.pdf
+[2026-03-31 03:24:56,413] INFO processing   OUTPUT FILE: odm_report/shots.geojson
+[2026-03-31 03:24:56,413] INFO processing   OUTPUT FILE: odm_report/stats.json
+[2026-03-31 03:24:56,414] INFO processing Found orthophoto_path: outputs/33ab5ef8-f581-47be-b010-30d379ea597e/odm_orthophoto/odm_orthophoto.tif
+[2026-03-31 03:24:56,414] INFO processing Found pointcloud_path: outputs/33ab5ef8-f581-47be-b010-30d379ea597e/odm_georeferencing/odm_georeferenced_model.laz
+[2026-03-31 03:24:56,414] INFO processing Found mesh_path: outputs/33ab5ef8-f581-47be-b010-30d379ea597e/odm_texturing/odm_textured_model_geo.obj
+[2026-03-31 03:24:56,415] INFO processing Found dsm_path: outputs/33ab5ef8-f581-47be-b010-30d379ea597e/odm_dem/dsm.tif
+[2026-03-31 03:24:56,415] INFO processing Not found: dtm_path (searched for ['dtm.tif'])
+[2026-03-31 03:24:56,415] INFO processing Not found: tiles_3d_path (searched for ['tileset.json'])
+[2026-03-31 03:24:56,520] INFO processing Removed NodeODM task 4b0b0c23-143f-488a-bfd3-a4be4ce3b329 to free memory (results already extracted to /app/media/outputs/33ab5ef8-f581-47be-b010-30d379ea597e)
+[2026-03-31 03:24:56,535] INFO processing Point cloud input: /app/media/outputs/33ab5ef8-f581-47be-b010-30d379ea597e/odm_georeferencing/odm_georeferenced_model.laz (8.0 MB)
+[2026-03-31 03:24:56,535] INFO processing Running PotreeConverter: PotreeConverter /app/media/outputs/33ab5ef8-f581-47be-b010-30d379ea597e/odm_georeferencing/odm_georeferenced_model.laz -o /app/media/outputs/33ab5ef8-f581-47be-b010-30d379ea597e/potree
+[2026-03-31 03:24:56,539] INFO processing PotreeConverter exit code: 127
+[2026-03-31 03:24:56,539] WARNING processing PotreeConverter stderr: PotreeConverter: error while loading shared libraries: liblaszip.so: cannot open shared object file: No such file or directory
+
+[2026-03-31 03:24:56,539] ERROR processing PotreeConverter failed (non-zero exit). Skipping Potree output.
+[2026-03-31 03:24:56,539] INFO processing ResourceManager: preparing memory for AI analysis
+[2026-03-31 03:24:56,548] INFO processing ResourceManager: ready for AI analysis (0 task(s) freed)
+[2026-03-31 03:24:56,548] INFO processing Launching AI scene analysis for project glen
+[2026-03-31 03:24:56,560] INFO processing Project glen pipeline completed
+[2026-03-31 03:24:56,560] INFO processing ResourceManager: post-pipeline cleanup
+[2026-03-31 03:24:56,604] INFO processing ResourceManager: unloaded model 'llama3.2-vision:11b' from memory
+[2026-03-31 03:24:56,604] INFO processing ResourceManager: freed Ollama memory (1 model(s) unloaded)
+[2026-03-31 03:24:56,604] INFO processing ResourceManager: cleanup complete (0 task(s), 1 model(s) freed)
+[2026-03-31 03:24:56,654] INFO processing Cleaned intermediate frames dir: frames_cdcaf78b-8be9-423d-b4ba-595c107dad6d (952.6 MB)
+[2026-03-31 03:24:56,654] INFO processing Project glen: cleaned 952.6 MB of intermediates
+[2026-03-31 03:24:56,728] ERROR processing Project e8b3615b-efa7-4949-9cc2-cc93cceb154b not found
+[2026-03-31 03:24:56,748] INFO ai_analysis Orthophoto found, using tile-based analysis for glen
+[2026-03-31 03:25:03,364] INFO ai_analysis Sliced /app/media/outputs/33ab5ef8-f581-47be-b010-30d379ea597e/odm_orthophoto/odm_orthophoto.tif into 136 tiles (512px, 15% overlap)
+[2026-03-31 03:25:33,768] WARNING ai_analysis Tile 72 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 03:27:57,499] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"B-1B-1-1-1-1-1-1
+[2026-03-31 03:30:09,785] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Boulder","category":"obstacle","relative_position":[0.5,0.7],"confidence":0.8,"description":"Rocky outcropping, potential  [  ]  [  ]
+[2026-03-31 03:30:42,028] WARNING ai_analysis Tile 5 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 03:30:48,706] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Vehicle","category":"vehicle","relative_position":[0.4,0.7],"confidence":0.8,"description":"Military vehicle, likely a tank or armored vehicle, with a large, flat, and long-­­­­­­­­­­­­­­­­­­­­­­­­­­­­­­­
+[2026-03-31 03:31:38,018] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Vehicle","category":"vehicle","relative_position":[0.5,0.7],"confidence":0.8,"description":"A vehicle is parked on the road, possibly a car or a truck, with a dark color and a flat, flat-looked- like- a- car- or- a- truck- with- a- dark- color- and- a- flat
+[2026-03-31 03:34:10,979] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Tree","category":"vegetation","relative_position":[0.5,0.7],"confidence":0.8,"description":"A single tree with a trunk diameter of approximately 30cm, located in a clearing with a few other trees. The tree is approximately 10m in height, with a 5-10m branch length. The tree is located in a small, 10-15m wide, 10-15m long, and 5-10m high, with a 5-10m, 10-15m, and
+[2026-03-31 03:36:21,752] WARNING ai_analysis Tile 85 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 03:38:37,196] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Landing Zone","category":"landing_zone","relative_position":[0.5,0.7],"confidence":0.8,"description":"A large, flat area with no vegetation, likely a military or military-transported landing zone, with a clear and flat surface, and no obstacles or vegetation, making it an ideal location for military operations or transportation of equipment, with a size of approximately 100-200 meters in length and 50-100 meters in width, with a clear and flat surface, and no obstacles or vegetation, 
+[2026-03-31 03:38:49,563] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Two-story residential building","category":"structure","relative_position":[0.5,0.7],"confidence":0.8,"description":"Potential enemy
+  target, use to f
+[2026-03-31 03:40:55,157] WARNING ai_analysis Tile 88 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 03:43:01,385] WARNING ai_analysis Tile 16 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 03:45:06,845] WARNING ai_analysis Tile 89 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 03:47:18,685] WARNING ai_analysis Tile 90 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 03:49:32,825] WARNING ai_analysis Tile 91 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 03:51:57,854] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Vehicle","category":"vehicle","relative_position":[0.5,0.7],"confidence":0.8,"description":"A vehicle is parked on the road, near the center of the image, with a small car- like object in the background, possibly a car- like object in the background, with a small
+[2026-03-31 03:54:15,186] WARNING ai_analysis Tile 94 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 03:56:40,618] WARNING ai_analysis Tile 96 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 03:59:18,424] WARNING ai_analysis Tile 99 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 04:01:23,305] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Vehicle","category":"vehicle","relative_position":[0.25,0.5],"confidence":0.8,"description":"A vehicle is visible in the center of the image, likely a truck or a car, with a clear path leading to it. The vehicle is surrounded by a small, cleared area, and a few trees are visible in the background. The vehicle is approximately 10-15 meters in length, and 5-10 meters in width, based on the image's resolution and the size of the vehicle’s shadow. The vehicle is a potential target for the
+[2026-03-31 04:03:27,650] WARNING ai_analysis Tile 100 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 04:05:31,276] WARNING ai_analysis Tile 28 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 04:07:40,075] WARNING ai_analysis Tile 29 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 04:10:37,192] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Vehicle","category":"vehicle","relative_position":[0.5,0.7],"confidence":0.8,"description":"Tactical vehicle, likely a military transport, with a flatbed and a trailer, near the center of the image, with a possible military vehicle in the background, near the top-right corner
+[2026-03-31 04:12:48,526] WARNING ai_analysis Tile 107 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 04:18:19,699] WARNING ai_analysis Tile 49 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 04:20:25,630] WARNING ai_analysis Tile 50 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 04:23:00,652] WARNING ai_analysis Tile 125 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 04:29:16,279] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Vehicle","category":"vehicle","relative_position":[0.4,0.7],"confidence":0.8,"description":"Possible enemy vehicle, possibly a tank or armored vehicle, with a large size and a flat, rectangular shape. It is located in the center of the image, near the road, and appears to be moving towards the left. The vehicle is approximately 10-15 meters in length, and its size is estimated to be around 5-10 meters in width. The vehicle is a potential threat to the enemy, and its location is a crit
+[2026-03-31 04:31:26,866] WARNING ai_analysis Tile 71 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 04:34:10,411] WARNING ai_analysis Tile 146 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 04:37:46,412] WARNING ai_analysis Tile 81 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 04:40:38,006] WARNING ai_analysis Tile 157 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 04:43:13,082] WARNING ai_analysis Tile 159 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 04:45:29,955] WARNING ai_analysis Tile 88 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 04:50:56,212] WARNING ai_analysis Tile 101 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 04:54:08,992] WARNING ai_analysis Tile 105 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 04:57:48,605] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Vehicle","category":"vehicle","relative_position":[0.4,0.7],"confidence":0.8,"description":"Possible enemy vehicle, high-velocity, low-impact, high-accuracy
+[2026-03-31 05:03:04,044] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Vehicle","category":"vehicle","relative_position":[0.4,0.7],"confidence":0.8,"description":"Possible enemy vehicle, 2-3 meters in length, 1-2 meters in width, 1-2 meters in height, 1-2 meters in distance, 1-2 meters in depth, 1-2 meters in width, 1-2 meters in height, 1-2 meters in depth, 1-2 meters in width, 1-2 meters in height
+[2026-03-31 05:04:56,746] INFO ai_analysis Raw detections from 205 tiles: 390
+[2026-03-31 05:04:56,780] INFO ai_analysis Deduplicated 390 detections to 379 (threshold: 5.0m)
+[2026-03-31 05:04:57,379] INFO ai_analysis Saved 379 annotations for project Test3
+[2026-03-31 05:06:29,000] INFO ai_analysis Unloading AI models from memory...
+[2026-03-31 05:06:29,005] INFO ai_analysis Unloaded model llama3.2-vision:11b from memory
+[2026-03-31 05:06:29,005] INFO ai_analysis Unloaded 1 model(s) from memory
+[2026-03-31 05:06:29,007] INFO ai_analysis AI analysis complete for Test3 in 8152.4s: 379 annotations (ortho mode), report=True
+[2026-03-31 05:06:29,041] INFO ai_analysis Orthophoto found, using tile-based analysis for glen
+[2026-03-31 05:06:35,423] INFO ai_analysis Sliced /app/media/outputs/33ab5ef8-f581-47be-b010-30d379ea597e/odm_orthophoto/odm_orthophoto.tif into 136 tiles (512px, 15% overlap)
+[2026-03-31 05:07:11,612] INFO ai_analysis Raw detections from 136 tiles: 333
+[2026-03-31 05:07:11,638] INFO ai_analysis Deduplicated 333 detections to 332 (threshold: 5.0m)
+[2026-03-31 05:07:12,144] INFO ai_analysis Saved 332 annotations for project glen
+[2026-03-31 05:08:28,316] INFO ai_analysis Unloading AI models from memory...
+[2026-03-31 05:08:28,321] INFO ai_analysis Unloaded model llama3.2-vision:11b from memory
+[2026-03-31 05:08:28,321] INFO ai_analysis Unloaded 1 model(s) from memory
+[2026-03-31 05:08:28,324] INFO ai_analysis AI analysis complete for glen in 6211.6s: 332 annotations (ortho mode), report=True
+[2026-03-31 05:08:28,346] INFO ai_analysis Orthophoto found, using tile-based analysis for Test3
+[2026-03-31 05:08:34,780] INFO ai_analysis Sliced /app/media/outputs/f90dbe30-d885-4263-b420-6c1ddcded666/odm_orthophoto/odm_orthophoto.tif into 205 tiles (512px, 15% overlap)
+[2026-03-31 05:15:50,202] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Vehicle","category":"vehicle","relative_position":[0.4,0.7],"confidence":0.8,"description":"Unmanned Aerial Vehicle (UAV) with a small, high-technology, and high-precision, and a high-technology
+[2026-03-31 05:21:34,722] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Vehicle","category":"vehicle","relative_position":[0.5,0.7],"confidence":0.8,"description":"Possible enemy vehicle, likely a truck or armored vehicle, with a large, flatbed trailer. The vehicle is positioned near the center of the image, with a clear view of the surrounding terrain. The vehicle appears to be moving slowly, with a low speed, and is likely to be a threat to the enemy. The vehicle's position is near the center of the image, with a clear view of the surrounding terrain. T
+[2026-03-31 05:23:36,146] WARNING ai_analysis Tile 37 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 05:28:11,855] WARNING ai_analysis Tile 43 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 05:33:14,169] WARNING ai_analysis Tile 57 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 05:35:34,299] WARNING ai_analysis Tile 55 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 05:40:04,762] WARNING ai_analysis Tile 64 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 05:44:53,345] WARNING ai_analysis Tile 79 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 05:48:31,051] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Vehicle","category":"vehicle","relative_position":[0.5,0.7],"confidence":0.8,"description":"Possible enemy vehicle, high-velocity, low-observable, and high-impact, with a possible threat to the area, and a potential
+[2026-03-31 05:51:52,382] WARNING ai_analysis Tile 94 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 06:02:34,475] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Vehicle","category":"vehicle","relative_position":[0.35,0.55],"confidence":0.8,"description":"Possible enemy vehicle, likely a truck or SUV, with a large cargo bed, located near the center of the image, with a possible fuel tank or generator on the back, near the road
+[2026-03-31 06:05:10,332] WARNING ai_analysis Tile 125 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 06:07:59,853] WARNING ai_analysis Tile 128 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 06:09:13,797] INFO ai_analysis Raw detections from 136 tiles: 549
+[2026-03-31 06:09:13,860] INFO ai_analysis Deduplicated 549 detections to 544 (threshold: 5.0m)
+[2026-03-31 06:09:14,773] INFO ai_analysis Saved 544 annotations for project glen
+[2026-03-31 06:11:55,937] INFO ai_analysis Unloading AI models from memory...
+[2026-03-31 06:11:55,942] INFO ai_analysis Unloaded model llama3.2-vision:11b from memory
+[2026-03-31 06:11:55,942] INFO ai_analysis Unloaded 1 model(s) from memory
+[2026-03-31 06:11:55,945] INFO ai_analysis AI analysis complete for glen in 3926.9s: 544 annotations (ortho mode), report=True
+[2026-03-31 06:11:55,970] INFO ai_analysis Orthophoto found, using tile-based analysis for Test3
+[2026-03-31 06:12:02,535] INFO ai_analysis Sliced /app/media/outputs/f90dbe30-d885-4263-b420-6c1ddcded666/odm_orthophoto/odm_orthophoto.tif into 205 tiles (512px, 15% overlap)
+[2026-03-31 06:16:30,148] WARNING ai_analysis Tile 141 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 06:20:12,746] WARNING ai_analysis Tile 147 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 06:22:22,697] WARNING ai_analysis Tile 148 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 06:25:09,602] WARNING ai_analysis Tile 156 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 06:28:05,453] WARNING ai_analysis Tile 159 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 06:36:22,124] WARNING ai_analysis Tile 48 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 06:37:11,593] WARNING ai_analysis Tile 50 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 06:40:28,317] WARNING ai_analysis Tile 54 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 06:45:53,870] WARNING ai_analysis Tile 66 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 06:47:30,591] INFO ai_analysis Raw detections from 205 tiles: 830
+[2026-03-31 06:47:30,715] INFO ai_analysis Deduplicated 829 detections to 787 (threshold: 5.0m)
+[2026-03-31 06:47:31,827] INFO ai_analysis Saved 787 annotations for project Test3
+[2026-03-31 06:52:19,837] INFO ai_analysis Unloading AI models from memory...
+[2026-03-31 06:52:19,842] INFO ai_analysis Unloaded model llama3.2-vision:11b from memory
+[2026-03-31 06:52:19,842] INFO ai_analysis Unloaded 1 model(s) from memory
+[2026-03-31 06:52:19,845] INFO ai_analysis AI analysis complete for Test3 in 6231.5s: 787 annotations (ortho mode), report=True
+[2026-03-31 06:57:11,130] WARNING ai_analysis Tile 94 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 06:57:18,739] WARNING ai_analysis Tile 95 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 06:59:43,352] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Building","category":"structure","relative_position":[0.35,0.55],"confidence":0.8,"description":"Potential target for
+  [  {“_” : “….”,”_” : “…”,”_” : …”,”_” :
+[2026-03-31 07:00:01,349] WARNING ai_analysis Tile 103 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:00:18,105] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Boulder","category":"obstacle","relative_position":[0.55,0.35],"confidence":0.8,"description":"Rocky outc
+  . . . . . .
+[2026-03-31 07:02:21,260] WARNING ai_analysis Tile 107 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:02:29,235] WARNING ai_analysis Tile 108 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:02:45,671] WARNING ai_analysis Tile 109 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:04:48,598] WARNING ai_analysis Tile 110 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:05:03,706] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Building","category":"structure","relative_position":[0.35,0.55],"confidence":0.8,"description":"Potential target for
+  [  ]  [  ]
+[2026-03-31 07:05:09,826] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Building","category":"structure","relative_position":[0.5,0.7],"confidence":0.8,"description":"Potential target for
+  [   ]
+[2026-03-31 07:05:16,345] WARNING ai_analysis Tile 113 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:07:19,128] WARNING ai_analysis Tile 114 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:07:25,262] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Two-story residential building","category":"structure","relative_position":[0.3,0.5],"confidence":0.8,"description":"Potential
+  target for  f
+[2026-03-31 07:09:27,915] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Cleared Area","category":"cleared_area","relative_position":[0.5,0.5],"confidence":0.8,"description":"A cleared area for a potential landing or
+  [“C”-”C”-”C”-”
+[2026-03-31 07:09:44,276] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Bicycle","category":"vehicle","relative_position":[0.5,0.7],"confidence":0.8,"description":"Bicycle in the field, potential target for
+  [  ]  [  ]
+[2026-03-31 07:11:46,998] WARNING ai_analysis Tile 118 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:13:49,710] WARNING ai_analysis Tile 119 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:13:55,821] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Two-story residential building","category":"structure","relative_position":[0.35,0.55],"confidence":0.8,"description":"Potential
+  target for  f
+[2026-03-31 07:14:20,171] WARNING ai_analysis Tile 121 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:16:22,909] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Landing Zone","category":"landing_zone","relative_position":[0.5,0.7],"confidence":0.8,"description":"A flat, open area with no vegetation or obstacles, suitable for landing or
+  [“Landing Zone”,”category”:”landing_zone”,”relative_position”:[0.5,0.7,”,”description”:”A flat, open area with no vegetation or
+  “L  ”,”category”:””,””,””,””,
+[2026-03-31 07:16:40,003] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Landing Zone","category":"landing_zone","relative_position":[0.5,0.7],"confidence":0.8,"description":"A small, flat area with a clear
+  path to it from the  [  ]  [  ]
+[2026-03-31 07:16:46,184] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Two-story residential building","category":"structure","relative_position":[0.5,0.7],"confidence":0.8,"description":"Potential target for
+  re-  [
+[2026-03-31 07:16:53,088] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Tree","category":"vegetation","relative_position":[0.5,0.7],"confidence":0.8,"description":"A single tree with a trunk diameter of approximately 0.5 meters, located in the center of the image, with a height of around 10-15 meters, and a branch- and-
+[2026-03-31 07:17:16,735] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Vegetation","category":"vegetation","relative_position":[0.5,0.7],"confidence":0.8,"description":"Dense foliage, potential hiding  –  –  –  –
+[2026-03-31 07:17:23,011] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Two-story residential building","category":"structure","relative_position":[0.4,0.7],"confidence":0.8,"description":"Potential target for
+  re-  [  ]
+[2026-03-31 07:17:42,925] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Two-story residential building","category":"structure","relative_position":[0.35,0.55],"confidence":0.8,"description":"Potential target for  [  ]  [  ]
+[2026-03-31 07:19:45,335] WARNING ai_analysis Tile 129 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:21:47,022] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Tree","category":"vegetation","relative_position":[0.3,0.7],"confidence":0.8,"description":"Potential enemy
+  positioning – use –  – – – – – –
+[2026-03-31 07:23:48,389] WARNING ai_analysis Tile 131 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:25:49,513] WARNING ai_analysis Tile 132 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:27:50,641] WARNING ai_analysis Tile 133 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:29:51,520] WARNING ai_analysis Tile 134 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:31:59,140] WARNING ai_analysis Tile 136 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:32:16,725] WARNING ai_analysis Tile 138 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:34:23,454] WARNING ai_analysis Tile 140 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:36:24,355] WARNING ai_analysis Tile 141 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:38:35,189] WARNING ai_analysis Tile 143 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:40:36,094] WARNING ai_analysis Tile 144 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:42:37,070] WARNING ai_analysis Tile 145 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:44:38,540] WARNING ai_analysis Tile 146 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:46:40,159] WARNING ai_analysis Tile 147 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:48:41,782] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Landing Zone","category":"landing_zone","relative_position":[0.4,0.7],"confidence":0.8,"description":"A large, flat area with no vegetation or obstacles, suitable for landing and/or taking off, with a clear and flat surface, and no obstacles or vegetation, making it an ideal location
+[2026-03-31 07:52:00,579] WARNING ai_analysis Tile 157 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:52:16,328] WARNING ai_analysis Tile 158 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:54:28,673] WARNING ai_analysis Tile 160 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 07:57:47,059] WARNING ai_analysis Tile 169 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 08:00:17,837] WARNING ai_analysis Tile 173 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 08:03:06,194] WARNING ai_analysis Tile 179 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 08:05:17,923] WARNING ai_analysis Tile 181 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 08:09:30,634] WARNING ai_analysis Tile 195 analysis failed: 'float' object has no attribute 'get'
+[2026-03-31 08:12:20,614] WARNING ai_analysis Failed to parse structured output after all cleanup.
+Raw: [{"label":"Vehicle","category":"vehicle","relative_position":[0.4,0.7],"confidence":0.8,"description":"Possible enemy vehicle, 2-3 meters in length, 1-2 meters in width, 1-2 meters in height, 1-2 meters in distance, 1-2 meters in depth, 1-2 meters in
+[2026-03-31 08:12:52,118] INFO ai_analysis Raw detections from 205 tiles: 619
+[2026-03-31 08:12:52,191] INFO ai_analysis Deduplicated 619 detections to 563 (threshold: 5.0m)
+[2026-03-31 08:12:53,000] INFO ai_analysis Saved 563 annotations for project Test3
+[2026-03-31 08:15:21,887] INFO ai_analysis Unloading AI models from memory...
+[2026-03-31 08:15:21,890] INFO ai_analysis Unloaded model llama3.2-vision:11b from memory
+[2026-03-31 08:15:21,890] INFO ai_analysis Unloaded 1 model(s) from memory
+[2026-03-31 08:15:21,892] INFO ai_analysis AI analysis complete for Test3 in 7405.9s: 563 annotations (ortho mode), report=True

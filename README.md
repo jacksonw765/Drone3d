@@ -11,7 +11,16 @@ Drone3D is a self-hosted, air-gap-ready web platform that transforms drone image
 - **Multi-Input Support** — Upload still images (JPG, TIFF, PNG, DNG), video files (MP4, MOV), and SRT telemetry files
 - **Smart Video Preprocessing** — Adaptive frame extraction with sharpness filtering and SRT-based geotagging
 - **Quality Presets** — Low / Medium / High / Ultra, each tuning ODM parameters for speed vs. fidelity
-- **Interactive 3D Viewer** — Potree-based point cloud viewer and Three.js mesh viewer in the browser
+- **Interactive 3D Viewer** — Potree point cloud viewer and advanced Three.js mesh viewer featuring:
+  - Real-time Above Ground Level (AGL) cursor readouts and elevation color legends
+  - Profile drawing tool for cross-section topology analysis
+  - Distance measurement tools for precise structural mapping
+  - Draggable info panels for selected objects
+  - Intuitive 'H' hotkey to quick-toggle Pan (hand tool) navigation
+- **AI Vision Analysis** — Integrated host-based Ollama support (e.g., Llama 3.2 Vision) for natural language querying, 3D object inspection via backend high-res orthophoto cropping, and temporal change detection
+- **ATAK Integration** — One-click export of ATAK data packages (.zip) containing CoT markers, DTED elevation, slippy map tiles, and AI analysis reports
+- **Dynamic Job Management** — Graceful cancellation of processing jobs from the UI with immediate resource deallocation and granular progress tracking
+- **Hardware Acceleration** — Support for GPU-accelerated workloads via dedicated Docker Compose profiles
 - **GPS-Aware Processing** — Auto-detects EXIF GPS; supports SRT geotagging, manual coordinates via `geo.txt`, and fully non-georeferenced workflows
 - **Download Outputs** — Orthophoto (GeoTIFF), point cloud (LAZ/LAS), textured OBJ mesh, DSM, DTM, and 3D Tiles
 - **Air-Gap Deployable** — Fully offline via Docker with a bundling script for disconnected networks
@@ -40,8 +49,9 @@ Drone3D is a self-hosted, air-gap-ready web platform that transforms drone image
 |---------|-------|---------|
 | **redis** | `redis:7-alpine` | Celery message broker and result backend |
 | **nodeodm** | `opendronemap/nodeodm` | Photogrammetry engine (OpenDroneMap) |
-| **web** | Custom (Dockerfile) | Django app served by Gunicorn — dashboard, REST API, 3D viewer |
-| **worker** | Custom (Dockerfile) | Celery worker — preprocessing, ODM orchestration, Potree conversion |
+| **web** | Custom (Dockerfile) | Django app served by Gunicorn — dashboard, REST API, 3D viewer, TAK/AI integration |
+| **worker** | Custom (Dockerfile) | Celery worker — preprocessing, ODM orchestration, Potree conversion, AI async tasks |
+| **ollama** | Native Host | AI Vision model host (runs outside Docker for raw performance and memory access) |
 
 ---
 
@@ -53,6 +63,8 @@ Drone3D is a self-hosted, air-gap-ready web platform that transforms drone image
 | Database | SQLite (file-based, zero-config) |
 | Task Queue | Redis 7 + Celery |
 | Photogrammetry | NodeODM / OpenDroneMap |
+| AI Vision | Ollama (host-based, native performance) + Llama Vision models |
+| ATAK Integration | CoT XML, DTED generation, Slippy Map Tile Server |
 | Point Cloud Viewer | Potree (compiled from source) |
 | Mesh Viewer | Three.js (OBJLoader) |
 | Video Processing | FFmpeg, Pillow, NumPy |
@@ -104,10 +116,16 @@ DJANGO_SUPERUSER_EMAIL=admin@drone3d.local
 ### 2. Build & Launch
 
 ```bash
-docker compose up --build -d
+# Standard CPU deployment
+docker compose -f docker-compose.cpu.yml up --build -d
+
+# GPU accelerated deployment (for systems with hardware support)
+docker compose -f docker-compose.gpu.yml up --build -d
 ```
 
 First build compiles PotreeConverter, Potree viewer, and GDAL bindings — expect **10–20 minutes** on the initial run.
+
+*(Optional) To enable AI analysis, run `bash scripts/ollama-init.sh` on your host system to download and start the Ollama service natively without Docker limiters.*
 
 ### 3. Access
 
@@ -207,6 +225,21 @@ Supported SRT formats: DJI, Skydio, Autel, Parrot, and generic CSV-style GPS.
 
 ---
 
+## AI Vision & ATAK Capabilities
+
+### Tactical Intelligence AI
+Drone3D integrates with **Ollama** natively on the host machine (bypassing Docker memory constraints) to perform visual analysis on generated scenes:
+- **Natural Language Queries**: Ask free-form questions like, "Are there any unauthorized vehicles in the main compound?" The AI queries the finalized orthophoto and responds rapidly with observational evidence.
+- **3D Object Inspection**: Select arbitrary 3D geometry. The system seamlessly crops a high-resolution sub-image of the object from the backend orthophoto and forwards it, along with structural properties and relative location, to the AI for robust identification.
+- **Change Detection**: Perform temporal comparisons highlighting architectural and layout changes over time between multiple drone flights over the same region.
+
+### ATAK / Team Awareness Kit Integration
+The platform offers out-of-the-box interoperability with TAK networks:
+- **Slippy Map Tile Server**: Streams the orthophoto directly to TAK end-user devices and existing GIS systems.
+- **ATAK Data Packages (.zip)**: One-click export bundling the map tiles, terrain elevation data (auto-converted to DTED format), intelligent 3D point-of-interest markers (CoT XML), map config, and the AI's intelligence report for offline operations.
+
+---
+
 ## API Reference
 
 All endpoints return JSON. CSRF tokens are required for POST requests (read from cookie).
@@ -247,7 +280,32 @@ All endpoints return JSON. CSRF tokens are required for POST requests (read from
 | `GET` | `/viewer/<uuid>/info/` | Viewer configuration JSON |
 | `GET` | `/viewer/<uuid>/potree/<path>` | Potree octree data files |
 | `GET` | `/viewer/<uuid>/mesh-data/<path>` | Mesh OBJ/MTL/texture files |
+| `GET` | `/viewer/<uuid>/elevation/` | Single-point elevation query (requires mapped DSM/DTM) |
+| `GET` | `/viewer/<uuid>/elevation/profile/` | Line-path elevation profile cross-section extraction |
+| `GET` | `/viewer/<uuid>/elevation/stats/` | Bounding box elevation stats (min, max, mean) |
+| `GET` | `/viewer/<uuid>/orthophoto-crop/` | Download cropped JPEG orthophoto at specific coordinate |
 | `GET` | `/viewer/<uuid>/download/<type>/` | Download output (`orthophoto`, `pointcloud`, `mesh`, `dsm`, `dtm`, `tiles`) |
+
+### AI Analysis
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/ai/status/` | Check AI inference engine connectivity and status |
+| `POST` | `/ai/query/<uuid>/` | Natural language QA agent query on a scene |
+| `POST` | `/ai/inspect/<uuid>/` | Trigger object identification for a 3D bounding box |
+| `GET/POST`| `/ai/annotations/<uuid>/` | List or create AI identified annotations |
+| `POST` | `/ai/annotations/<uuid>/<id>/delete/` | Delete an AI annotation |
+| `POST` | `/ai/change-detect/` | Trigger temporal multi-scan change detection |
+| `POST` | `/ai/import/<uuid>/` | Rapidly import annotation data |
+
+### TAK/ATAK Integration
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/tak/tiles/<uuid>/<z>/<x>/<y>.png` | Feed slippy map tiles directly to ATAK clients |
+| `GET` | `/tak/map-source/<uuid>/` | Retrieve ATAK configuration Map Source XML |
+| `POST` | `/tak/generate-tiles/<uuid>/` | Run batch cache pre-render for offline tiles |
+| `GET` | `/tak/export/<uuid>/` | Download comprehensive ATAK Data Package Zip files |
 
 ### Other
 
@@ -281,6 +339,16 @@ Drone3d/
 ├── viewer/                   # 3D viewer Django app
 │   ├── views.py              # Potree/mesh serving, downloads
 │   └── urls.py               # Viewer URL routes
+│
+├── ai_analysis/              # AI vision pipeline
+│   ├── query_engine.py       # Ollama vision connector & QA agent
+│   ├── tasks.py              # Background AI evaluation queues
+│   └── views.py              # AI interface endpoints
+│
+├── tak_integration/          # ATAK/WinTAK export tooling
+│   ├── data_package.py       # ZIP builder for deep offline sync
+│   ├── tile_server.py        # Slippy map caching network
+│   └── elevation.py          # Digital Surface Model → DTED converter
 │
 ├── templates/                # Django HTML templates
 │   ├── base.html             # Base layout

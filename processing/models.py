@@ -81,7 +81,20 @@ class DroneProject(models.Model):
     ai_analysis_enabled = models.BooleanField(default=True)
     ai_report = models.TextField(blank=True, default="")
 
+    # AI Image Enhancement
+    class EnhanceMode(models.TextChoices):
+        OFF = "off", "Off"
+        STANDARD = "standard", "Standard (Sharpen + Contrast)"
+        SUPER_RES = "super_res", "Super Resolution (AI Upscale)"
+
+    ai_enhance_mode = models.CharField(
+        max_length=10,
+        choices=EnhanceMode.choices,
+        default=EnhanceMode.OFF,
+    )
+
     # Timestamps
+    processing_started_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
     completed_at = models.DateTimeField(blank=True, null=True)

@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 
 (function () {
@@ -191,174 +192,422 @@ import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
             labelRenderer.setSize(container.clientWidth, container.clientHeight);
         }
     }
+    /**
+     * Auto-orient a loaded model so its natural "up" direction maps to +Y.
+     *
+     * Uses a two-phase approach:
+     * 1. **Dominant-normal detection**: Compute the area-weighted average
+     *    of all face normals. For any outdoor scene (terrain, buildings,
+     *    neighborhoods) the ground/roof faces dominate, so this average
+     *    points roughly along the gravity axis ("up" in the model's frame).
+     * 2. **Align to +Y**: Compute the quaternion that rotates the dominant
+     *    normal to +Y and apply it.  This works for ANY orientation —
+     *    not just axis-aligned 90° multiples — which is essential for
+     *    non-georeferenced video reconstructions.
+     */
+    function autoOrientModel(object) {
+        // ── Phase 1: Find the dominant "up" vector via face normals ──
+        const upCandidate = new THREE.Vector3(0, 0, 0);
 
-    // ── Mesh Loading ───────────────────────────────────
+        const vA = new THREE.Vector3();
+        const vB = new THREE.Vector3();
+        const vC = new THREE.Vector3();
+        const edge1 = new THREE.Vector3();
+        const edge2 = new THREE.Vector3();
+        const faceNormal = new THREE.Vector3();
+        let totalArea = 0;
+
+        object.traverse((child) => {
+            if (!child.isMesh || !child.geometry) return;
+            const geo = child.geometry;
+            const pos = geo.attributes.position;
+            const idx = geo.index;
+            const faceCount = idx ? idx.count / 3 : pos.count / 3;
+
+            // Sample up to 10000 faces for performance on large meshes
+            const step = Math.max(1, Math.floor(faceCount / 10000));
+
+            for (let fi = 0; fi < faceCount; fi += step) {
+                const a = idx ? idx.getX(fi * 3)     : fi * 3;
+                const b = idx ? idx.getX(fi * 3 + 1) : fi * 3 + 1;
+                const c = idx ? idx.getX(fi * 3 + 2) : fi * 3 + 2;
+
+                vA.fromBufferAttribute(pos, a);
+                vB.fromBufferAttribute(pos, b);
+                vC.fromBufferAttribute(pos, c);
+
+                edge1.subVectors(vB, vA);
+                edge2.subVectors(vC, vA);
+                faceNormal.crossVectors(edge1, edge2);
+
+                const area = faceNormal.length() * 0.5;
+                if (area < 1e-8) continue;
+
+                // Accumulate area-weighted normal (NOT normalized yet)
+                // The larger the face, the more it votes
+                upCandidate.add(faceNormal);  // faceNormal is already area-weighted (cross product magnitude = 2×area)
+                totalArea += area;
+            }
+        });
+
+        if (totalArea < 1e-8 || upCandidate.length() < 1e-8) {
+            console.warn('Auto-orient: no valid faces found, skipping orientation');
+            return;
+        }
+
+        upCandidate.normalize();
+
+        console.log(
+            `Auto-orient: dominant normal = (${upCandidate.x.toFixed(3)}, ` +
+            `${upCandidate.y.toFixed(3)}, ${upCandidate.z.toFixed(3)})`
+        );
+
+        // ── Phase 2: Decide which direction is "up" ──
+        // The dominant normal could point up OR down (e.g. if more of the
+        // model's surface faces downward — like the underside of terrain).
+        // For aerial reconstructions, we generally want the normal to end
+        // up as +Y (ground normals point away from the earth = up).
+        //
+        // Heuristic: if the dominant normal has a strong -Y component in
+        // the CURRENT frame, it's likely an inverted model. Flip it.
+        // We also check all 6 axis directions and pick the closest one
+        // as a sanity check.
+
+        // The "up" vector we want to align to
+        const targetUp = new THREE.Vector3(0, 1, 0);
+
+        // Check if the dominant normal is pointing mostly "down" by
+        // comparing its Y component. In an un-oriented model, the
+        // largest normal component indicates the original up axis.
+        // If it's negative, the model is flipped.
+        const absX = Math.abs(upCandidate.x);
+        const absY = Math.abs(upCandidate.y);
+        const absZ = Math.abs(upCandidate.z);
+
+        // Determine which axis dominates
+        let dominantAxis = 'Y';
+        let dominantValue = upCandidate.y;
+        if (absX > absY && absX > absZ) {
+            dominantAxis = 'X';
+            dominantValue = upCandidate.x;
+        } else if (absZ > absY && absZ > absX) {
+            dominantAxis = 'Z';
+            dominantValue = upCandidate.z;
+        }
+
+        console.log(`Auto-orient: dominant axis = ${dominantAxis} (${dominantValue > 0 ? '+' : '-'})`);
+
+        // If already pointing close to +Y, minimal rotation needed
+        const dotWithY = upCandidate.dot(targetUp);
+        if (dotWithY > 0.995) {
+            console.log('Auto-orient: model is already upright (dot > 0.995), no rotation needed');
+            return;
+        }
+
+        // ── Phase 3: Apply the rotation ──
+        // Compute quaternion to rotate upCandidate → targetUp
+        const quat = new THREE.Quaternion().setFromUnitVectors(upCandidate, targetUp);
+        const rotMatrix = new THREE.Matrix4().makeRotationFromQuaternion(quat);
+
+        object.traverse((child) => {
+            if (child.isMesh && child.geometry) {
+                child.geometry.applyMatrix4(rotMatrix);
+                child.geometry.computeBoundingBox();
+                child.geometry.computeVertexNormals();
+            }
+        });
+
+        object.rotation.set(0, 0, 0);
+        object.updateMatrixWorld(true);
+
+        // Log the rotation that was applied
+        const euler = new THREE.Euler().setFromQuaternion(quat);
+        console.log(
+            `Auto-orient: applied rotation ` +
+            `(${(euler.x * 180 / Math.PI).toFixed(1)}°, ` +
+            `${(euler.y * 180 / Math.PI).toFixed(1)}°, ` +
+            `${(euler.z * 180 / Math.PI).toFixed(1)}°) ` +
+            `— dominant ${dominantAxis} axis → +Y`
+        );
+    }
+
     function loadMesh() {
         showStatus('Loading 3D model…');
 
         const baseUrl = CONFIG.meshDataUrl;
         const objFilename = CONFIG.meshFilename || 'odm_textured_model_geo.obj';
+        const glbFilename = objFilename.replace('.obj', '.glb');
         const mtlFilename = objFilename.replace('.obj', '.mtl');
 
-        const mtlLoader = new MTLLoader();
-        mtlLoader.setPath(baseUrl);
+        // Strategy: GLB (best) → OBJ+MTL (good) → OBJ plain (fallback)
+        loadGLB(baseUrl, glbFilename)
+            .catch(err => {
+                console.warn('GLB not available, trying OBJ+MTL…', err.message);
+                return loadOBJWithMTL(baseUrl, objFilename, mtlFilename);
+            })
+            .catch(err => {
+                console.warn('OBJ+MTL failed, falling back to plain OBJ…', err.message);
+                return loadPlainOBJ(baseUrl, objFilename);
+            })
+            .then(object => {
+                // ── Auto-orient: find the rotation that makes the model
+                // flattest along Y (vertical). For aerial/drone models,
+                // the altitude dimension is always the smallest extent.
+                autoOrientModel(object);
 
-        mtlLoader.load(
-            mtlFilename,
-            (materials) => {
-                materials.preload();
-                loadOBJ(baseUrl, objFilename, materials);
-            },
-            undefined,
-            () => {
-                console.warn('MTL not found, loading OBJ without textures');
-                loadOBJ(baseUrl, objFilename, null);
-            }
-        );
+                onMeshLoaded(object);
+            })
+            .catch(error => {
+                console.error('Error loading mesh:', error);
+                showStatus('Failed to load 3D model.', true);
+            });
     }
 
-    function loadOBJ(baseUrl, filename, materials) {
-        const objLoader = new OBJLoader();
-        if (materials) {
-            objLoader.setMaterials(materials);
-        }
-
-        objLoader.setPath(baseUrl);
-
-        objLoader.load(
-            filename,
-            (object) => {
-                // Apply default material if no textures
-                if (!materials) {
+    /**
+     * Load a GLB file (single binary with embedded textures).
+     * This is the most efficient path — one HTTP request, compressed.
+     */
+    function loadGLB(baseUrl, glbFilename) {
+        return new Promise((resolve, reject) => {
+            const url = baseUrl + glbFilename;
+            showStatus('Loading textured model (GLB)…');
+            const loader = new GLTFLoader();
+            loader.load(
+                url,
+                (gltf) => {
+                    const object = gltf.scene;
+                    // Ensure meshes have correct settings
                     object.traverse((child) => {
                         if (child.isMesh) {
-                            child.material = new THREE.MeshStandardMaterial({
-                                color: 0x8899aa,
-                                roughness: 0.7,
-                                metalness: 0.1,
-                                flatShading: false,
-                            });
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                            // Ensure double-sided rendering for terrain
+                            if (child.material) {
+                                if (Array.isArray(child.material)) {
+                                    child.material.forEach(m => { m.side = THREE.DoubleSide; });
+                                } else {
+                                    child.material.side = THREE.DoubleSide;
+                                }
+                            }
                         }
+                    });
+                    console.log('Loaded textured GLB model');
+                    resolve(object);
+                },
+                (progress) => {
+                    if (progress.total > 0) {
+                        const pct = (progress.loaded / progress.total * 100).toFixed(0);
+                        showStatus(`Downloading textured model… ${pct}%`);
+                    }
+                },
+                (error) => reject(error)
+            );
+        });
+    }
+
+    /**
+     * Load OBJ + MTL (separate texture files loaded automatically by MTLLoader).
+     */
+    function loadOBJWithMTL(baseUrl, objFilename, mtlFilename) {
+        return new Promise((resolve, reject) => {
+            showStatus('Loading materials…');
+            const mtlLoader = new MTLLoader();
+            mtlLoader.setPath(baseUrl);
+            mtlLoader.load(
+                mtlFilename,
+                (materials) => {
+                    materials.preload();
+                    showStatus('Loading textured model (OBJ)…');
+                    const objLoader = new OBJLoader();
+                    objLoader.setMaterials(materials);
+                    objLoader.setPath(baseUrl);
+                    objLoader.load(
+                        objFilename,
+                        (object) => {
+                            object.traverse((child) => {
+                                if (child.isMesh) {
+                                    child.castShadow = true;
+                                    child.receiveShadow = true;
+                                    if (child.material) {
+                                        if (Array.isArray(child.material)) {
+                                            child.material.forEach(m => { m.side = THREE.DoubleSide; });
+                                        } else {
+                                            child.material.side = THREE.DoubleSide;
+                                        }
+                                    }
+                                }
+                            });
+                            console.log('Loaded textured OBJ+MTL model');
+                            resolve(object);
+                        },
+                        (progress) => {
+                            if (progress.total > 0) {
+                                const pct = (progress.loaded / progress.total * 100).toFixed(0);
+                                showStatus(`Downloading model… ${pct}%`);
+                            }
+                        },
+                        (error) => reject(error)
+                    );
+                },
+                undefined,
+                (error) => reject(error)
+            );
+        });
+    }
+
+    /**
+     * Load plain OBJ without textures (last resort — flat shaded).
+     */
+    function loadPlainOBJ(baseUrl, objFilename) {
+        return new Promise((resolve, reject) => {
+            showStatus('Loading model geometry…');
+            fetch(baseUrl + objFilename).then(response => {
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const contentLength = +response.headers.get('Content-Length') || 0;
+                const reader = response.body.getReader();
+                const chunks = [];
+                let received = 0;
+
+                function readChunk() {
+                    return reader.read().then(({ done, value }) => {
+                        if (done) {
+                            showStatus('Parsing geometry…');
+                            const blob = new Blob(chunks);
+                            return blob.text();
+                        }
+                        chunks.push(value);
+                        received += value.length;
+                        if (contentLength > 0) {
+                            const pct = (received / contentLength * 100).toFixed(0);
+                            showStatus(`Downloading model… ${pct}%`);
+                        }
+                        return readChunk();
                     });
                 }
 
-                // Correct orientation from Z-up (photogrammetry) to Y-up (Three.js)
-                const rotMatrix = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
+                return readChunk();
+            }).then(objText => {
+                const objLoader = new OBJLoader();
+                const object = objLoader.parse(objText);
+
+                // Apply clean fallback material (no textures available)
                 object.traverse((child) => {
-                    if (child.isMesh && child.geometry) {
-                        child.geometry.applyMatrix4(rotMatrix);
-                    }
-                });
-                object.rotation.set(0, 0, 0);
-                object.updateMatrixWorld(true);
-
-                // Center the model at the origin
-                const box = new THREE.Box3().setFromObject(object);
-                const center = box.getCenter(new THREE.Vector3());
-                const size = box.getSize(new THREE.Vector3());
-                const maxDim = Math.max(size.x, size.y, size.z);
-
-                object.position.set(-center.x, -center.y, -center.z);
-                meshObject = object;
-                scene.add(meshObject);
-
-                // Store mesh dimensions for segmentation
-                _meshMaxDim = maxDim;
-                _meshGroundY = -size.y / 2; // ground is at the bottom of the bounding box
-
-                // Detect vertex colors
-                _hasVertexColors = false;
-                meshObject.traverse((child) => {
-                    if (child.isMesh && child.geometry?.attributes?.color) {
-                        _hasVertexColors = true;
-                    }
-                });
-                if (_hasVertexColors) {
-                    console.log('Mesh has vertex colors — color criterion enabled');
-                } else {
-                    console.log('No vertex colors detected — color criterion disabled, weights redistributed');
-                }
-
-                // Collect mesh children for raycasting
-                allMeshChildren = [];
-                meshObject.traverse((child) => {
                     if (child.isMesh) {
-                        allMeshChildren.push(child);
+                        child.material = new THREE.MeshStandardMaterial({
+                            color: 0x8899aa,
+                            roughness: 0.6,
+                            metalness: 0.15,
+                            flatShading: false,
+                            side: THREE.DoubleSide,
+                        });
+                        child.castShadow = true;
+                        child.receiveShadow = true;
                     }
                 });
+                console.log('Loaded plain OBJ (no textures)');
+                resolve(object);
+            }).catch(reject);
+        });
+    }
 
-                // Auto-calculate distance threshold based on mesh scale
-                SEG_CONFIG.distanceThreshold = maxDim * 0.08;
 
-                // Position camera to see the whole model
-                const fitDistance = maxDim * 1.5;
-                camera.position.set(
-                    fitDistance * 0.7,
-                    fitDistance * 0.5,
-                    fitDistance * 0.7
-                );
-                camera.lookAt(0, 0, 0);
-                controls.target.set(0, 0, 0);
-                controls.update();
 
-                // Adjust grid
-                const gridScale = Math.ceil(maxDim / 50) * 50;
-                scene.children.forEach(c => {
-                    if (c instanceof THREE.GridHelper) {
-                        c.scale.set(gridScale / 200, 1, gridScale / 200);
-                        c.position.y = -size.y / 2;
-                    }
-                });
+    function onMeshLoaded(object) {
+        // Center the model at the origin
+        const box = new THREE.Box3().setFromObject(object);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
 
-                // Update near/far planes
-                camera.near = maxDim * 0.001;
-                camera.far = maxDim * 20;
-                camera.updateProjectionMatrix();
-                controls.minDistance = maxDim * 0.05;
-                controls.maxDistance = maxDim * 10;
+        object.position.set(-center.x, -center.y, -center.z);
+        meshObject = object;
+        scene.add(meshObject);
 
-                hideStatus();
+        // Store mesh dimensions for segmentation
+        _meshMaxDim = maxDim;
+        _meshGroundY = -size.y / 2;
 
-                // Count triangles
-                let triangles = 0;
-                object.traverse((child) => {
-                    if (child.isMesh && child.geometry) {
-                        const geo = child.geometry;
-                        triangles += geo.index
-                            ? geo.index.count / 3
-                            : geo.attributes.position.count / 3;
-                    }
-                });
-                const infoEl = document.getElementById('mesh-info');
-                if (infoEl) {
-                    const triStr = triangles > 1000000
-                        ? (triangles / 1000000).toFixed(1) + 'M'
-                        : triangles > 1000
-                        ? (triangles / 1000).toFixed(0) + 'K'
-                        : triangles.toString();
-                    infoEl.textContent = `${triStr} triangles`;
-                    infoEl.style.display = 'block';
-                }
-
-                console.log(`Mesh loaded: ${triangles} triangles, bounding box: ${size.x.toFixed(1)} x ${size.y.toFixed(1)} x ${size.z.toFixed(1)}`);
-
-                // Build adjacency in background for flood-fill selection
-                buildAdjacencyAsync();
-
-                // Initialize scene interaction system
-                initInteraction();
-            },
-            (xhr) => {
-                if (xhr.lengthComputable) {
-                    const pct = (xhr.loaded / xhr.total * 100).toFixed(0);
-                    showStatus(`Loading 3D model… ${pct}%`);
-                }
-            },
-            (error) => {
-                console.error('Error loading mesh:', error);
-                showStatus('Failed to load 3D model. The mesh file may be too large or in an unsupported format.', true);
+        // Detect vertex colors
+        _hasVertexColors = false;
+        meshObject.traverse((child) => {
+            if (child.isMesh && child.geometry?.attributes?.color) {
+                _hasVertexColors = true;
             }
+        });
+        if (_hasVertexColors) {
+            console.log('Mesh has vertex colors — color criterion enabled');
+        } else {
+            console.log('No vertex colors detected — color criterion disabled, weights redistributed');
+        }
+
+        // Collect mesh children for raycasting
+        allMeshChildren = [];
+        meshObject.traverse((child) => {
+            if (child.isMesh) {
+                allMeshChildren.push(child);
+            }
+        });
+
+        // Auto-calculate distance threshold based on mesh scale
+        SEG_CONFIG.distanceThreshold = maxDim * 0.08;
+
+        // Position camera to see the whole model
+        const fitDistance = maxDim * 1.5;
+        camera.position.set(
+            fitDistance * 0.7,
+            fitDistance * 0.5,
+            fitDistance * 0.7
         );
+        camera.lookAt(0, 0, 0);
+        controls.target.set(0, 0, 0);
+        controls.update();
+
+        // Adjust grid
+        const gridScale = Math.ceil(maxDim / 50) * 50;
+        scene.children.forEach(c => {
+            if (c instanceof THREE.GridHelper) {
+                c.scale.set(gridScale / 200, 1, gridScale / 200);
+                c.position.y = -size.y / 2;
+            }
+        });
+
+        // Update near/far planes
+        camera.near = maxDim * 0.001;
+        camera.far = maxDim * 20;
+        camera.updateProjectionMatrix();
+        controls.minDistance = maxDim * 0.05;
+        controls.maxDistance = maxDim * 10;
+
+        hideStatus();
+
+        // Count triangles
+        let triangles = 0;
+        object.traverse((child) => {
+            if (child.isMesh && child.geometry) {
+                const geo = child.geometry;
+                triangles += geo.index
+                    ? geo.index.count / 3
+                    : geo.attributes.position.count / 3;
+            }
+        });
+        const infoEl = document.getElementById('mesh-info');
+        if (infoEl) {
+            const triStr = triangles > 1000000
+                ? (triangles / 1000000).toFixed(1) + 'M'
+                : triangles > 1000
+                ? (triangles / 1000).toFixed(0) + 'K'
+                : triangles.toString();
+            infoEl.textContent = `${triStr} triangles`;
+            infoEl.style.display = 'block';
+        }
+
+        console.log(`Mesh loaded: ${triangles} triangles, bounding box: ${size.x.toFixed(1)} x ${size.y.toFixed(1)} x ${size.z.toFixed(1)}`);
+
+        // Build adjacency deferred (lazy — on first selection)
+        buildAdjacencyAsync();
+
+        // Initialize scene interaction system
+        initInteraction();
     }
 
     // ── Initialize Scene Interaction ──────────────────
@@ -397,12 +646,133 @@ import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 
     // ── Adjacency Graph for Flood-Fill ───────────────
     function buildAdjacencyAsync() {
-        // Build on next idle to not block rendering
-        if (typeof requestIdleCallback !== 'undefined') {
-            requestIdleCallback(() => buildAdjacency(), { timeout: 5000 });
-        } else {
-            setTimeout(() => buildAdjacency(), 1000);
+        // LAZY: Don't build on load. The adjacency graph will be built
+        // on-demand when the user first tries to select something.
+        // This avoids blocking the browser's main thread on large meshes.
+        console.log('Adjacency graph deferred — will build on first selection');
+    }
+
+    function ensureAdjacency() {
+        // Build synchronously if not yet done (only called when user
+        // actively triggers a selection, so brief freeze is acceptable)
+        if (!adjacencyBuilt) {
+            buildAdjacency();
         }
+    }
+
+    function buildAdjacencyChunked(chunkSize) {
+        if (adjacencyBuilt) return;
+        console.time('buildAdjacency');
+
+        adjacencyMap = new Map();
+
+        // Flatten all mesh processing into a single work queue
+        const workQueue = [];
+
+        allMeshChildren.forEach((mesh) => {
+            const geo = mesh.geometry;
+            if (!geo || !geo.attributes.position) return;
+
+            const positions = geo.attributes.position;
+            const index = geo.index;
+            const faceCount = index ? index.count / 3 : positions.count / 3;
+            if (faceCount === 0) return;
+
+            // For non-indexed: build position hash
+            let posHashToVertices = null;
+            if (!index) {
+                posHashToVertices = new Map();
+                for (let vi = 0; vi < positions.count; vi++) {
+                    const hash = positionHash(
+                        positions.getX(vi), positions.getY(vi), positions.getZ(vi)
+                    );
+                    if (!posHashToVertices.has(hash)) posHashToVertices.set(hash, []);
+                    posHashToVertices.get(hash).push(vi);
+                }
+            }
+
+            workQueue.push({ geo, positions, index, faceCount, posHashToVertices });
+        });
+
+        if (workQueue.length === 0) {
+            adjacencyBuilt = true;
+            return;
+        }
+
+        // Process work items one mesh at a time, chunked within each
+        let workIdx = 0;
+        let faceIdx = 0;
+        let edgeToFaces = new Map();
+
+        function processChunk() {
+            if (workIdx >= workQueue.length) {
+                adjacencyBuilt = true;
+                console.timeEnd('buildAdjacency');
+                console.log(`Adjacency map: ${adjacencyMap.size} entries`);
+                return;
+            }
+
+            const work = workQueue[workIdx];
+            const { geo, positions, index, faceCount, posHashToVertices } = work;
+            const end = Math.min(faceIdx + chunkSize, faceCount);
+
+            function getVertIdx(fi, corner) {
+                return index ? index.getX(fi * 3 + corner) : fi * 3 + corner;
+            }
+
+            for (let fi = faceIdx; fi < end; fi++) {
+                const a = getVertIdx(fi, 0);
+                const b = getVertIdx(fi, 1);
+                const c = getVertIdx(fi, 2);
+
+                let edgeKeys;
+                if (index) {
+                    edgeKeys = [edgeKey(a, b), edgeKey(b, c), edgeKey(c, a)];
+                } else {
+                    const ha = positionHash(positions.getX(a), positions.getY(a), positions.getZ(a));
+                    const hb = positionHash(positions.getX(b), positions.getY(b), positions.getZ(b));
+                    const hc = positionHash(positions.getX(c), positions.getY(c), positions.getZ(c));
+                    edgeKeys = [
+                        ha < hb ? `${ha}|${hb}` : `${hb}|${ha}`,
+                        hb < hc ? `${hb}|${hc}` : `${hc}|${hb}`,
+                        hc < ha ? `${hc}|${ha}` : `${ha}|${hc}`,
+                    ];
+                }
+
+                for (const ek of edgeKeys) {
+                    if (!edgeToFaces.has(ek)) {
+                        edgeToFaces.set(ek, []);
+                    }
+                    edgeToFaces.get(ek).push(fi);
+                }
+            }
+
+            faceIdx = end;
+
+            if (faceIdx >= faceCount) {
+                // Finished this mesh — build adjacency from edges
+                for (const [, faces] of edgeToFaces) {
+                    for (let i = 0; i < faces.length; i++) {
+                        for (let j = i + 1; j < faces.length; j++) {
+                            if (!adjacencyMap.has(faces[i])) adjacencyMap.set(faces[i], new Set());
+                            if (!adjacencyMap.has(faces[j])) adjacencyMap.set(faces[j], new Set());
+                            adjacencyMap.get(faces[i]).add(faces[j]);
+                            adjacencyMap.get(faces[j]).add(faces[i]);
+                        }
+                    }
+                }
+
+                // Move to next mesh
+                workIdx++;
+                faceIdx = 0;
+                edgeToFaces = new Map();
+            }
+
+            // Yield to the browser so rendering stays smooth
+            setTimeout(processChunk, 0);
+        }
+
+        processChunk();
     }
 
     function buildAdjacency() {
@@ -543,7 +913,12 @@ import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 
     // ── Mesh Adapter: Select Region (Multi-Criteria Flood-Fill) ─────
     function meshSelectRegion(hit) {
-        if (!hit || !adjacencyBuilt || !adjacencyMap) {
+        if (!hit) return createPointSelection(hit);
+
+        // Lazy-init: build adjacency on first selection attempt
+        ensureAdjacency();
+
+        if (!adjacencyBuilt || !adjacencyMap) {
             return createPointSelection(hit);
         }
 
@@ -1338,6 +1713,132 @@ import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
         }
     }
 
+    function showToast(message, type = 'info') {
+        let container = document.querySelector('.toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.className = 'toast-container';
+            document.body.appendChild(container);
+        }
+        const icons = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.innerHTML = `
+            <span class="toast-icon">${icons[type]}</span>
+            <span class="toast-message">${message}</span>
+        `;
+        container.appendChild(toast);
+        setTimeout(() => {
+            toast.classList.add('toast-exit');
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
+    // ── Layer Toggles (Side Panel) ──────────────────────
+    let orthoLayer = null;
+    let orthoLoading = false;
+
+    window.toggleLayer = function (layer) {
+        switch (layer) {
+            case 'mesh':
+                if (meshObject) {
+                    meshObject.visible = !meshObject.visible;
+                    syncPanelCheckbox('toggle-mesh', meshObject.visible);
+                    showToast(meshObject.visible ? 'Mesh visible' : 'Mesh hidden', 'info');
+                } else {
+                    showToast('Mesh not loaded yet', 'warning');
+                    syncPanelCheckbox('toggle-mesh', false);
+                }
+                break;
+            case 'orthophoto':
+                if (orthoLayer) {
+                    orthoLayer.visible = !orthoLayer.visible;
+                    syncPanelCheckbox('toggle-orthophoto', orthoLayer.visible);
+                    showToast(orthoLayer.visible ? 'Orthophoto visible' : 'Orthophoto hidden', 'info');
+                } else if (!orthoLoading && CONFIG.hasOrthophoto) {
+                    loadOrthophotoOverlay();
+                } else if (orthoLoading) {
+                    showToast('Orthophoto is still loading...', 'info');
+                } else {
+                    showToast('No orthophoto available for this project', 'warning');
+                    syncPanelCheckbox('toggle-orthophoto', false);
+                }
+                break;
+            case 'pointcloud':
+                showToast('Point cloud layer is only available in Point Cloud viewer mode', 'info');
+                syncPanelCheckbox('toggle-pointcloud', false);
+                break;
+        }
+    };
+
+    function loadOrthophotoOverlay() {
+        if (!meshObject || !CONFIG.projectId) return;
+        orthoLoading = true;
+        showToast('Loading orthophoto overlay…', 'info');
+
+        const box = new THREE.Box3().setFromObject(meshObject);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+
+        const orthoLat = CONFIG.orthoCenterLat || 0;
+        const orthoLon = CONFIG.orthoCenterLon || 0;
+        if (orthoLat === 0 && orthoLon === 0) {
+            orthoLoading = false;
+            showToast('Orthophoto has no georeference data', 'warning');
+            syncPanelCheckbox('toggle-orthophoto', false);
+            return;
+        }
+        const cropUrl = `/viewer/${CONFIG.projectId}/orthophoto-crop/?lat=${orthoLat}&lon=${orthoLon}&size=2048`;
+
+        const textureLoader = new THREE.TextureLoader();
+        textureLoader.load(
+            cropUrl,
+            (texture) => {
+                texture.minFilter = THREE.LinearFilter;
+                texture.magFilter = THREE.LinearFilter;
+                texture.colorSpace = THREE.SRGBColorSpace;
+
+                // Create ground plane matching mesh footprint
+                const planeGeo = new THREE.PlaneGeometry(size.x * 1.1, size.z * 1.1);
+                const planeMat = new THREE.MeshBasicMaterial({
+                    map: texture,
+                    transparent: true,
+                    opacity: 0.85,
+                    side: THREE.DoubleSide,
+                    depthWrite: false,
+                });
+                orthoLayer = new THREE.Mesh(planeGeo, planeMat);
+
+                // Position at ground level, rotated flat (plane faces +Z by default, rotate to face +Y)
+                orthoLayer.rotation.x = -Math.PI / 2;
+                orthoLayer.position.set(center.x, box.min.y - 0.05, center.z);
+
+                scene.add(orthoLayer);
+                orthoLoading = false;
+                syncPanelCheckbox('toggle-orthophoto', true);
+                showToast('Orthophoto overlay loaded', 'success');
+                console.log('Orthophoto overlay loaded in mesh viewer mode');
+            },
+            undefined,
+            (err) => {
+                console.warn('Failed to load orthophoto texture:', err);
+                orthoLoading = false;
+                showToast('Failed to load orthophoto overlay', 'error');
+                syncPanelCheckbox('toggle-orthophoto', false);
+            }
+        );
+    }
+
+    function syncPanelCheckbox(checkboxId, checked) {
+        const toggle = document.getElementById(checkboxId);
+        if (toggle) toggle.checked = checked;
+    }
+
+    // Auto-check the mesh checkbox on load (the mesh is visible by default)
+    document.addEventListener('DOMContentLoaded', () => {
+        syncPanelCheckbox('toggle-mesh', true);
+    });
+
     // ── Controls ────────────────────────────────────────
     window.togglePanel = function () {
         panelOpen = !panelOpen;
@@ -1377,6 +1878,293 @@ import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
         if (btn) btn.classList.toggle('active');
     };
 
+    // ── Topology View (Elevation Coloring for Mesh) ────────
+    let topoActive = false;
+    let topoOriginalMaterials = new Map();  // mesh child → original material
+    let topoTooltipEl = null;
+    let topoLegendEl = null;
+    let topoMinY = 0, topoMaxY = 0;
+
+    window.toggleTopologyView = function () {
+        if (!meshObject) {
+            showToast('Mesh not loaded yet', 'warning');
+            return;
+        }
+        topoActive = !topoActive;
+        console.log(`Topology view toggled: ${topoActive}`);
+
+        const btn = document.getElementById('btn-topology');
+        if (btn) btn.classList.toggle('active', topoActive);
+        syncPanelCheckbox('toggle-topology', topoActive);
+
+        if (topoActive) {
+            applyTopologyColoring();
+            showTopoTooltip();
+            showTopoLegend();
+            showToast('Topology view — hover to see elevation', 'info');
+        } else {
+            restoreOriginalMaterials();
+            hideTopoTooltip();
+            hideTopoLegend();
+        }
+    };
+
+    function applyTopologyColoring() {
+        if (!meshObject) return;
+
+        // Calculate Y bounds (height in Three.js Y-up scene)
+        const box = new THREE.Box3().setFromObject(meshObject);
+        topoMinY = box.min.y;
+        topoMaxY = box.max.y;
+        const heightRange = topoMaxY - topoMinY || 1;
+        console.log(`Topology coloring: Y range [${topoMinY.toFixed(2)}, ${topoMaxY.toFixed(2)}], range=${heightRange.toFixed(2)}`);
+
+        let meshCount = 0;
+        meshObject.traverse((child) => {
+            if (!child.isMesh || !child.geometry) return;
+            meshCount++;
+
+            // Save original material (clone correctly — handle arrays)
+            if (!topoOriginalMaterials.has(child)) {
+                if (Array.isArray(child.material)) {
+                    topoOriginalMaterials.set(child, child.material.map(m => m.clone()));
+                } else {
+                    topoOriginalMaterials.set(child, child.material.clone());
+                }
+            }
+
+            const geo = child.geometry;
+            const positions = geo.attributes.position;
+            if (!positions) return;
+
+            // Build vertex colors based on elevation (Y value)
+            const colors = new Float32Array(positions.count * 3);
+
+            for (let i = 0; i < positions.count; i++) {
+                // Position is in local space — transform to world Y
+                const localY = positions.getY(i);
+                const worldY = localY + meshObject.position.y;
+                const t = Math.max(0, Math.min(1, (worldY - topoMinY) / heightRange));
+
+                // Color gradient: blue → cyan → green → yellow → red
+                const color = elevationColor(t);
+                colors[i * 3] = color.r;
+                colors[i * 3 + 1] = color.g;
+                colors[i * 3 + 2] = color.b;
+            }
+
+            geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+            // CRITICAL: Create a clean elevation material that uses ONLY vertex colors.
+            // Must NOT inherit any texture map from the original material, otherwise
+            // the texture completely overrides the vertex colors.
+            const topoMat = new THREE.MeshStandardMaterial({
+                vertexColors: true,
+                roughness: 0.7,
+                metalness: 0.0,
+                flatShading: false,
+                side: THREE.DoubleSide,
+                // Explicitly NO map, NO normalMap, NO aoMap — only vertex colors
+            });
+
+            // Dispose old material to free GPU memory
+            if (Array.isArray(child.material)) {
+                child.material.forEach(m => m.dispose());
+            } else {
+                child.material.dispose();
+            }
+
+            child.material = topoMat;
+            child.material.needsUpdate = true;
+        });
+        console.log(`Topology coloring applied to ${meshCount} mesh children`);
+    }
+
+    function elevationColor(t) {
+        // 5-stop gradient: blue → cyan → green → yellow → red
+        const stops = [
+            { pos: 0.0, r: 0.2, g: 0.2, b: 1.0 },  // blue
+            { pos: 0.25, r: 0.0, g: 0.85, b: 1.0 },  // cyan
+            { pos: 0.5, r: 0.2, g: 1.0, b: 0.2 },   // green
+            { pos: 0.75, r: 1.0, g: 1.0, b: 0.0 },   // yellow
+            { pos: 1.0, r: 1.0, g: 0.2, b: 0.0 },   // red
+        ];
+
+        // Find segment
+        for (let i = 0; i < stops.length - 1; i++) {
+            if (t >= stops[i].pos && t <= stops[i + 1].pos) {
+                const segT = (t - stops[i].pos) / (stops[i + 1].pos - stops[i].pos);
+                return {
+                    r: stops[i].r + (stops[i + 1].r - stops[i].r) * segT,
+                    g: stops[i].g + (stops[i + 1].g - stops[i].g) * segT,
+                    b: stops[i].b + (stops[i + 1].b - stops[i].b) * segT,
+                };
+            }
+        }
+        return stops[stops.length - 1];
+    }
+
+    function restoreOriginalMaterials() {
+        topoOriginalMaterials.forEach((origMat, child) => {
+            // Dispose the topology material
+            if (Array.isArray(child.material)) {
+                child.material.forEach(m => m.dispose());
+            } else {
+                child.material.dispose();
+            }
+            child.material = origMat;
+            child.material.needsUpdate = true;
+        });
+        topoOriginalMaterials.clear();
+        console.log('Topology coloring removed, original materials restored');
+    }
+
+    function showTopoTooltip() {
+        if (topoTooltipEl) return;
+        topoTooltipEl = document.createElement('div');
+        topoTooltipEl.id = 'mesh-topo-tooltip';
+        topoTooltipEl.style.cssText = `
+            position: fixed; display: none; pointer-events: none; z-index: 600;
+            padding: 8px 14px; background: rgba(10, 14, 26, 0.85);
+            border: 1px solid rgba(0, 230, 138, 0.3); border-radius: 8px;
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4), 0 0 15px rgba(0,230,138,0.1);
+            font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;
+            color: #e2e8f0; min-width: 120px;
+        `;
+        document.body.appendChild(topoTooltipEl);
+
+        const container = document.getElementById('threejs-render-area');
+        if (container) {
+            container.addEventListener('mousemove', onTopoHover);
+        }
+    }
+
+    function hideTopoTooltip() {
+        const container = document.getElementById('threejs-render-area');
+        if (container) {
+            container.removeEventListener('mousemove', onTopoHover);
+        }
+        if (topoTooltipEl) {
+            topoTooltipEl.remove();
+            topoTooltipEl = null;
+        }
+    }
+
+    let _topoThrottle = 0;
+    function onTopoHover(e) {
+        if (!topoActive || !topoTooltipEl || !camera || !renderer) return;
+
+        const now = performance.now();
+        if (now - _topoThrottle < 30) return;
+        _topoThrottle = now;
+
+        const container = document.getElementById('threejs-render-area');
+        if (!container) return;
+
+        const rect = container.getBoundingClientRect();
+        const mx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        const my = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+        const rc = new THREE.Raycaster();
+        rc.setFromCamera(new THREE.Vector2(mx, my), camera);
+        const hits = rc.intersectObjects(allMeshChildren, false);
+
+        if (hits.length === 0) {
+            topoTooltipEl.style.display = 'none';
+            return;
+        }
+
+        const hit = hits[0];
+        const worldY = hit.point.y;
+        const heightRange = topoMaxY - topoMinY || 1;
+        const agl = worldY - topoMinY;
+        const heightPct = Math.max(0, Math.min(100, (agl / heightRange * 100)));
+
+        const hue = Math.max(0, Math.min(240, (1 - agl / heightRange) * 240));
+        const barColor = `hsl(${hue}, 80%, 55%)`;
+
+        topoTooltipEl.innerHTML = `
+            <div style="display:flex;align-items:center;gap:10px;">
+                <div style="width:4px;height:36px;border-radius:2px;background:linear-gradient(to top, #4444ff, #00ddff, #44ff44, #ffff00, #ff4444);position:relative;">
+                    <div style="position:absolute;left:-2px;width:8px;height:3px;border-radius:1px;background:${barColor};bottom:${heightPct}%;transform:translateY(50%);box-shadow:0 0 4px ${barColor};"></div>
+                </div>
+                <div>
+                    <div style="color:rgba(255,255,255,0.5);font-size:0.6rem;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;">Height</div>
+                    <div style="font-size:1rem;font-weight:700;color:#00e68a;">${agl.toFixed(1)}m <span style="font-size:0.7rem;color:rgba(255,255,255,0.4);">AGL</span></div>
+                    <div style="font-size:0.7rem;color:rgba(255,255,255,0.5);margin-top:1px;">⬆ ${worldY.toFixed(1)}m elev</div>
+                </div>
+            </div>
+        `;
+
+        topoTooltipEl.style.display = 'block';
+        topoTooltipEl.style.left = `${e.clientX + 20}px`;
+        topoTooltipEl.style.top = `${e.clientY - 20}px`;
+
+        requestAnimationFrame(() => {
+            if (!topoTooltipEl) return;
+            const tr = topoTooltipEl.getBoundingClientRect();
+            if (tr.right > window.innerWidth) {
+                topoTooltipEl.style.left = `${e.clientX - tr.width - 10}px`;
+            }
+            if (tr.bottom > window.innerHeight) {
+                topoTooltipEl.style.top = `${e.clientY - tr.height - 10}px`;
+            }
+        });
+    }
+
+    function showTopoLegend() {
+        if (topoLegendEl) {
+            topoLegendEl.classList.add('visible');
+            return;
+        }
+        topoLegendEl = document.createElement('div');
+        topoLegendEl.id = 'mesh-elevation-legend';
+        topoLegendEl.style.cssText = `
+            position: fixed; bottom: 80px; left: 20px; z-index: 500;
+            padding: 14px 16px; background: rgba(10, 14, 26, 0.8);
+            border: 1px solid rgba(255,255,255,0.08); border-radius: 10px;
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+            font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+            color: #e2e8f0; display: flex; align-items: stretch; gap: 10px;
+            opacity: 0; transition: opacity 0.3s;
+        `;
+
+        const heightRange = topoMaxY - topoMinY;
+        const maxLabel = heightRange.toFixed(1);
+
+        topoLegendEl.innerHTML = `
+            <div style="display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;font-size:0.65rem;color:rgba(255,255,255,0.5);">
+                <span>${maxLabel}m</span>
+                <span>${(heightRange * 0.5).toFixed(1)}m</span>
+                <span>0m</span>
+            </div>
+            <div style="width:14px;height:80px;border-radius:4px;background:linear-gradient(to top, #4444ff, #00ddff, #44ff44, #ffff00, #ff4444);"></div>
+            <div style="display:flex;flex-direction:column;justify-content:center;">
+                <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.05em;color:rgba(255,255,255,0.4);margin-bottom:4px;">Elevation</div>
+                <div style="font-size:0.8rem;font-weight:600;color:#00e68a;">Topology</div>
+            </div>
+        `;
+
+        document.body.appendChild(topoLegendEl);
+        requestAnimationFrame(() => {
+            topoLegendEl.style.opacity = '1';
+            topoLegendEl.classList.add('visible');
+        });
+    }
+
+    function hideTopoLegend() {
+        if (topoLegendEl) {
+            topoLegendEl.style.opacity = '0';
+            setTimeout(() => {
+                if (topoLegendEl) {
+                    topoLegendEl.classList.remove('visible');
+                }
+            }, 300);
+        }
+    }
+
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
@@ -1385,6 +2173,10 @@ import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
             case 'w': window.toggleWireframe(); break;
             case 's': window.togglePanel(); break;
             case 'f': window.toggleFullscreen(); break;
+            case 't': window.toggleTopologyView(); break;
+            case 'Escape':
+                if (topoActive) window.toggleTopologyView();
+                break;
         }
     });
 

@@ -21,7 +21,7 @@ services:
       - "3000:3000"
     volumes:
       - nodeodm_data:/var/www/data
-    command: ["node", "index.js", "--max_concurrency", "1", "--cleanup_tasks_after", "2880"]
+    command: ["node", "index.js", "--max_concurrency", "1", "--cleanup_tasks_after", "5"]
     deploy:
       resources:
         limits:
@@ -50,6 +50,9 @@ services:
     restart: unless-stopped
     volumes:
       - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=30s    # Unload models 30s after last request (default: 5m)
+    mem_reservation: 256m        # Soft limit — Docker prefers giving RAM to NodeODM
     healthcheck:
       test: ["CMD-SHELL", "test -f /bin/ollama || exit 0 && ollama list > /dev/null 2>&1"]
       interval: 30s

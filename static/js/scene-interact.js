@@ -19,6 +19,7 @@ const MODE = {
     NAVIGATE: 'navigate',
     SELECT: 'select',
     MEASURE: 'measure',
+    HAND: 'hand',
 };
 
 // ── State ────────────────────────────────────────────────
@@ -207,6 +208,13 @@ function bindEvents() {
 function onMouseDown(e) {
     if (e.button !== 0) return;
     if (e.target.closest('.scene-info-panel, .scene-context-menu, .viewer-toolbar, .viewer-panel, .ai-query-panel')) return;
+
+    // In MEASURE mode, just record position for the click — don't interfere with orbit
+    if (currentMode === MODE.MEASURE) {
+        _measureClickStart = { x: e.clientX, y: e.clientY, time: performance.now() };
+        return;
+    }
+
     if (currentMode !== MODE.SELECT) return;
 
     const rect = _container.getBoundingClientRect();
@@ -220,6 +228,8 @@ function onMouseDown(e) {
         adapter.controls.enabled = false;
     }
 }
+
+let _measureClickStart = null;
 
 let _hoverThrottle = 0;
 function onMouseMove(e) {
@@ -249,6 +259,25 @@ function onMouseMove(e) {
 }
 
 function onMouseUp(e) {
+    // Handle MEASURE mode clicks
+    if (currentMode === MODE.MEASURE && _measureClickStart) {
+        const dx = e.clientX - _measureClickStart.x;
+        const dy = e.clientY - _measureClickStart.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const elapsed = performance.now() - _measureClickStart.time;
+        _measureClickStart = null;
+
+        // Only count as a click if the mouse didn't move much (not a drag/orbit)
+        if (dist < 5 && elapsed < 500) {
+            const adapter = getActiveAdapter();
+            if (adapter) {
+                const hit = adapter.pick(e);
+                if (hit) handleMeasureClick(hit);
+            }
+        }
+        return;
+    }
+
     if (!isLassoing) return;
 
     // Re-enable orbit controls
@@ -267,9 +296,9 @@ function onMouseUp(e) {
 
     if (totalDist < LASSO_MIN_DISTANCE && elapsed < 400) {
         clearLasso();
-        const adapter = getActiveAdapter();
-        if (adapter) {
-            const hit = adapter.pick(e);
+        const adapter2 = getActiveAdapter();
+        if (adapter2) {
+            const hit = adapter2.pick(e);
             if (hit) handleSelect(hit, e.shiftKey);
         }
         return;
@@ -469,20 +498,20 @@ function createContextMenu() {
     contextMenuEl.id = 'scene-context-menu';
     contextMenuEl.innerHTML = `
         <button class="ctx-item" data-action="inspect">
-            <span class="ctx-icon">🔍</span>
+            <span class="ctx-icon"><i data-lucide="search" class="inline-icon" style="width:16px;height:16px;"></i></span>
             <span>Inspect Object</span>
         </button>
         <button class="ctx-item" data-action="measure">
-            <span class="ctx-icon">📏</span>
+            <span class="ctx-icon"><i data-lucide="ruler" style="width:18px;height:18px;margin-right:8px;"></i></span>
             <span>Measure from here</span>
         </button>
         <button class="ctx-item" data-action="annotate">
-            <span class="ctx-icon">📌</span>
+            <span class="ctx-icon"><i data-lucide="map-pin" style="width:18px;height:18px;margin-right:8px;"></i></span>
             <span>Add Annotation</span>
         </button>
         <div class="ctx-divider"></div>
         <button class="ctx-item" data-action="ask-ai">
-            <span class="ctx-icon">🤖</span>
+            <span class="ctx-icon"><i data-lucide="bot" style="width:20px;height:20px;margin-right:8px;"></i></span>
             <span>Ask AI about this</span>
         </button>
         <button class="ctx-item" data-action="estimate-distance">
@@ -556,6 +585,59 @@ function createInfoPanel() {
     infoPanelEl.className = 'scene-info-panel';
     infoPanelEl.id = 'scene-info-panel';
     document.body.appendChild(infoPanelEl);
+
+    // Make info panel draggable by its header
+    _makeDraggable(infoPanelEl);
+}
+
+// ── Draggable Panel Logic ────────────────────────────────
+let _dragState = null;
+
+function _makeDraggable(panel) {
+    panel.addEventListener('mousedown', (e) => {
+        // Only drag from header area
+        const header = e.target.closest('.sip-header');
+        if (!header) return;
+        // Don't drag if clicking close button
+        if (e.target.closest('.sip-close')) return;
+
+        e.preventDefault();
+        const rect = panel.getBoundingClientRect();
+        _dragState = {
+            offsetX: e.clientX - rect.left,
+            offsetY: e.clientY - rect.top,
+        };
+
+        // Switch from fixed CSS positioning to absolute drag position
+        panel.style.transition = 'none';
+        panel.style.cursor = 'grabbing';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!_dragState) return;
+        e.preventDefault();
+
+        const x = e.clientX - _dragState.offsetX;
+        const y = e.clientY - _dragState.offsetY;
+
+        // Clamp to viewport
+        const maxX = window.innerWidth - 80;
+        const maxY = window.innerHeight - 40;
+        infoPanelEl.style.left = `${Math.max(0, Math.min(x, maxX))}px`;
+        infoPanelEl.style.top = `${Math.max(0, Math.min(y, maxY))}px`;
+        infoPanelEl.style.bottom = 'auto';
+        infoPanelEl.style.right = 'auto';
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (_dragState) {
+            _dragState = null;
+            if (infoPanelEl) {
+                infoPanelEl.style.transition = '';
+                infoPanelEl.style.cursor = '';
+            }
+        }
+    });
 }
 
 function showInfoPanel(region) {
@@ -566,7 +648,7 @@ function showInfoPanel(region) {
     const info = region.info || {};
 
     infoPanelEl.innerHTML = `
-        <div class="sip-header">
+        <div class="sip-header" style="cursor:grab;">
             <div class="sip-title">
                 <span class="sip-icon">${getCategoryIcon(info.category)}</span>
                 <span>${info.label || 'Selected Region'}</span>
@@ -613,13 +695,13 @@ function showInfoPanel(region) {
         </div>
         <div class="sip-actions">
             <button class="sip-btn sip-btn-primary" onclick="window.D3D_Interact.inspectSelection()">
-                🤖 Ask AI
+                <i data-lucide="bot" style="width:20px;height:20px;margin-right:8px;"></i> Ask AI
             </button>
             <button class="sip-btn sip-btn-secondary" onclick="window.D3D_Interact.measureFromSelection()">
-                📏 Measure
+                <i data-lucide="ruler" style="width:18px;height:18px;margin-right:8px;"></i> Measure
             </button>
             <button class="sip-btn sip-btn-secondary" onclick="window.D3D_Interact.annotateSelection()">
-                📌 Annotate
+                <i data-lucide="map-pin" style="width:18px;height:18px;margin-right:8px;"></i> Annotate
             </button>
         </div>
         ${selections.length === 2 ? `
@@ -631,6 +713,12 @@ function showInfoPanel(region) {
         ` : ''}
     `;
 
+    // Reset position to default CSS location when showing new selection
+    infoPanelEl.style.left = '';
+    infoPanelEl.style.top = '';
+    infoPanelEl.style.bottom = '';
+    infoPanelEl.style.right = '';
+
     infoPanelEl.classList.add('visible');
 }
 
@@ -640,12 +728,12 @@ function hideInfoPanel() {
 
 function getCategoryIcon(cat) {
     const icons = {
-        structure: '🏛',
-        vegetation: '🌲',
-        vehicle: '🚗',
+        structure: '<i data-lucide="building" style="width:18px;height:18px;margin-right:8px;"></i>',
+        vegetation: '<i data-lucide="tree-pine" style="width:18px;height:18px;margin-right:8px;"></i>',
+        vehicle: '<i data-lucide="car" style="width:18px;height:18px;margin-right:8px;"></i>',
         terrain: '⛰',
-        water: '💧',
-        road: '🛤',
+        water: '<i data-lucide="droplet" style="width:14px;height:14px;margin-right:6px;"></i>',
+        road: '<i data-lucide="route" class="inline-icon" style="width:16px;height:16px;"></i>',
         unknown: '❓',
     };
     return icons[cat] || icons.unknown;
@@ -762,10 +850,10 @@ async function inspectSelection() {
             if (actionsEl) {
                 actionsEl.innerHTML = `
                     <button class="sip-btn sip-btn-primary" onclick="window.D3D_Interact.inspectSelection()">
-                        🤖 Ask Again
+                        <i data-lucide="bot" style="width:20px;height:20px;margin-right:8px;"></i> Ask Again
                     </button>
                     <button class="sip-btn sip-btn-secondary" onclick="window.D3D_Interact.measureFromSelection()">
-                        📏 Measure
+                        <i data-lucide="ruler" style="width:18px;height:18px;margin-right:8px;"></i> Measure
                     </button>
                 `;
             }
@@ -775,7 +863,7 @@ async function inspectSelection() {
             actionsEl.innerHTML = `
                 <div class="sip-error">AI query failed: ${e.message}</div>
                 <button class="sip-btn sip-btn-primary" onclick="window.D3D_Interact.inspectSelection()">
-                    🤖 Retry
+                    <i data-lucide="bot" style="width:20px;height:20px;margin-right:8px;"></i> Retry
                 </button>
             `;
         }
@@ -875,21 +963,58 @@ function annotateSelection() {
 }
 
 // ── Mode Management ──────────────────────────────────────
+let _handModePrevControls = null;
+
 function setMode(mode) {
+    // Restore controls when leaving hand mode
+    if (currentMode === MODE.HAND && mode !== MODE.HAND) {
+        const adapter = getActiveAdapter();
+        if (adapter && adapter.controls && _handModePrevControls) {
+            adapter.controls.mouseButtons.LEFT = _handModePrevControls.left;
+            adapter.controls.mouseButtons.MIDDLE = _handModePrevControls.middle;
+            adapter.controls.mouseButtons.RIGHT = _handModePrevControls.right;
+            _handModePrevControls = null;
+        }
+    }
+
     currentMode = mode;
 
     // Update toolbar button states
     document.getElementById('btn-interact-select')?.classList.toggle('active', mode === MODE.SELECT);
     document.getElementById('btn-interact-measure')?.classList.toggle('active', mode === MODE.MEASURE);
+    document.getElementById('btn-interact-hand')?.classList.toggle('active', mode === MODE.HAND);
 
     // Update cursor
     if (_container) {
-        _container.style.cursor = mode === MODE.NAVIGATE ? '' : 'crosshair';
+        if (mode === MODE.HAND) {
+            _container.style.cursor = 'grab';
+        } else if (mode === MODE.NAVIGATE) {
+            _container.style.cursor = '';
+        } else {
+            _container.style.cursor = 'crosshair';
+        }
     }
 
     // Reset measurement state when switching modes
     if (mode !== MODE.MEASURE) {
         measurePoints = [];
+    }
+
+    // Hand mode: remap left mouse to pan
+    if (mode === MODE.HAND) {
+        const adapter = getActiveAdapter();
+        if (adapter && adapter.controls) {
+            const ctrl = adapter.controls;
+            _handModePrevControls = {
+                left: ctrl.mouseButtons.LEFT,
+                middle: ctrl.mouseButtons.MIDDLE,
+                right: ctrl.mouseButtons.RIGHT,
+            };
+            // Import THREE namespace from the controls' constructor or fallback
+            ctrl.mouseButtons.LEFT = 2;    // PAN (THREE.MOUSE.RIGHT = 2)
+            ctrl.mouseButtons.MIDDLE = 1;  // DOLLY
+            ctrl.mouseButtons.RIGHT = 0;   // ROTATE
+        }
     }
 
     // Notify adapters
@@ -911,6 +1036,10 @@ function toggleMeasure() {
     if (currentMode === MODE.NAVIGATE) {
         clearMeasurements();
     }
+}
+
+function toggleHand() {
+    setMode(currentMode === MODE.HAND ? MODE.NAVIGATE : MODE.HAND);
 }
 
 // ── Toolbar ──────────────────────────────────────────────
@@ -939,6 +1068,13 @@ function addToolbarButtons() {
     measureBtn.innerHTML = '⌗';
     measureBtn.onclick = toggleMeasure;
 
+    const handBtn = document.createElement('button');
+    handBtn.className = 'viewer-toolbar-btn';
+    handBtn.id = 'btn-interact-hand';
+    handBtn.title = 'Hand Tool — Pan [H]';
+    handBtn.innerHTML = '✋';
+    handBtn.onclick = toggleHand;
+
     const clearBtn = document.createElement('button');
     clearBtn.className = 'viewer-toolbar-btn';
     clearBtn.id = 'btn-interact-clear';
@@ -950,11 +1086,13 @@ function addToolbarButtons() {
         toolbar.insertBefore(divider, insertBefore);
         toolbar.insertBefore(selectBtn, insertBefore);
         toolbar.insertBefore(measureBtn, insertBefore);
+        toolbar.insertBefore(handBtn, insertBefore);
         toolbar.insertBefore(clearBtn, insertBefore);
     } else {
         toolbar.appendChild(divider);
         toolbar.appendChild(selectBtn);
         toolbar.appendChild(measureBtn);
+        toolbar.appendChild(handBtn);
         toolbar.appendChild(clearBtn);
     }
 
@@ -963,6 +1101,7 @@ function addToolbarButtons() {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
         if (e.key === 'q') toggleSelect();
         if (e.key === 'x') toggleMeasure();
+        if (e.key === 'h') toggleHand();
     });
 }
 
@@ -1001,6 +1140,7 @@ export {
     setMode,
     toggleSelect,
     toggleMeasure,
+    toggleHand,
     clearAllSelections,
     clearMeasurements,
     hideInfoPanel,
@@ -1024,6 +1164,7 @@ window.D3D_Interact = {
     setMode,
     toggleSelect,
     toggleMeasure,
+    toggleHand,
     clearAllSelections,
     clearMeasurements,
     hideInfoPanel,

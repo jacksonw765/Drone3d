@@ -35,7 +35,7 @@
                 </div>
                 <div class="progress-text" style="display:flex;justify-content:space-between;align-items:center;">
                     <span>{{ project.progress|floatformat:1 }}%</span>
-                    <span style="font-size:0.7rem;color:var(--text-tertiary);cursor:pointer;" onclick="showProcessingLogs('{{ project.id }}')">📋 View logs</span>
+                    <span style="font-size:0.7rem;color:var(--text-tertiary);cursor:pointer;" onclick="showProcessingLogs('{{ project.id }}')"><i data-lucide="file-text" class="inline-icon" style="width:14px;height:14px;margin-right:4px;"></i> View logs</span>
                 </div>
                 {% endif %}
 
@@ -48,7 +48,7 @@
                     border-radius: 8px;
                     font-size: 0.82rem;
                 ">
-                    <p style="color:#fca5a5;margin:0 0 4px 0;font-weight:600;">⚠️ Processing Failed</p>
+                    <p style="color:#fca5a5;margin:0 0 4px 0;font-weight:600;"><i data-lucide="alert-triangle" class="inline-icon" style="width:16px;height:16px;margin-right:6px;"></i> Processing Failed</p>
                     <p style="color:#e5e7eb;margin:0 0 4px 0;" class="error-summary-text">{{ project.error_message|truncatewords:30 }}</p>
                     <p style="color:#9ca3af;margin:0;font-size:0.78rem;" class="error-suggestion-text"></p>
                 </div>
@@ -61,7 +61,7 @@
                                 const s = card.querySelector('.error-summary-text');
                                 const t = card.querySelector('.error-suggestion-text');
                                 if (s) s.textContent = raw.summary;
-                                if (t) t.textContent = '💡 ' + (raw.suggestion || '');
+                                if (t) t.innerHTML = '<i data-lucide="lightbulb" class="inline-icon" style="width:14px;height:14px;position:relative;top:2px;margin-right:4px;"></i>' + (raw.suggestion || ''); lucide.createIcons();
                             }
                         } catch(e) {}
                     })();
@@ -70,10 +70,10 @@
 
                 <div class="project-meta">
                     <span class="project-meta-item">
-                        📅 {{ project.created_at|date:"M d, H:i" }}
+                        <i data-lucide="calendar" class="inline-icon" style="width:14px;height:14px;margin-right:4px;"></i> {{ project.created_at|date:"M d, H:i" }}
                     </span>
                     <span class="project-meta-item">
-                        📊 {{ project.get_quality_preset_display }}
+                        <i data-lucide="bar-chart-2" class="inline-icon" style="width:14px;height:14px;margin-right:4px;"></i> {{ project.get_quality_preset_display }}
                     </span>
                     <span class="project-meta-item">
                         {{ project.get_input_type_display }}
@@ -83,41 +83,41 @@
             <div class="card-footer">
                 {% if project.status == 'uploading' %}
                 <button class="btn btn-secondary btn-sm" onclick="openUploadPanel('{{ project.id }}')">
-                    📤 Upload Files
+                    <i data-lucide="upload-cloud" class="inline-icon" style="width:16px;height:16px;margin-right:6px;"></i> Upload Files
                 </button>
                 <button class="btn btn-primary btn-sm" onclick="startProcessing('{{ project.id }}')" id="btn-process-{{ project.id }}">
-                    ▶ Process
+                    <i data-lucide="play" class="inline-icon" style="width:16px;height:16px;margin-right:6px;"></i> Process
                 </button>
                 {% elif project.status == 'completed' %}
                 <a href="/viewer/{{ project.id }}/" class="btn btn-primary btn-sm">
-                    🌐 View 3D Model
+                    <i data-lucide="globe" class="inline-icon" style="width:16px;height:16px;margin-right:6px;"></i> View 3D Model
                 </a>
                 <button class="btn btn-danger btn-sm" onclick="deleteProject('{{ project.id }}', '{{ project.name }}')">
-                    🗑
+                    <i data-lucide="trash-2" class="inline-icon" style="width:16px;height:16px;"></i>
                 </button>
                 {% elif project.status == 'failed' %}
                 <button class="btn btn-secondary btn-sm" onclick="openUploadPanel('{{ project.id }}')">
-                    📤 Upload More
+                    <i data-lucide="upload-cloud" class="inline-icon" style="width:16px;height:16px;margin-right:6px;"></i> Upload More
                 </button>
                 <button class="btn btn-primary btn-sm" onclick="startProcessing('{{ project.id }}')" id="btn-process-{{ project.id }}">
-                    ▶ Retry Process
+                    <i data-lucide="refresh-cw" class="inline-icon" style="width:16px;height:16px;margin-right:6px;"></i> Retry Process
                 </button>
                 <button class="btn btn-danger btn-sm" onclick="deleteProject('{{ project.id }}', '{{ project.name }}')">
-                    🗑
+                    <i data-lucide="trash-2" class="inline-icon" style="width:16px;height:16px;"></i>
                 </button>
                 {% else %}
                 <button class="btn btn-secondary btn-sm" onclick="showProcessingLogs('{{ project.id }}')">
-                    📋 Pipeline Status
+                    <i data-lucide="activity" class="inline-icon" style="width:16px;height:16px;margin-right:6px;"></i> Pipeline Status
                 </button>
                 <button class="btn btn-danger btn-sm" onclick="cancelProcessing('{{ project.id }}', '{{ project.name }}')">
-                    ✕ Cancel
+                    <i data-lucide="x" class="inline-icon" style="width:16px;height:16px;margin-right:6px;"></i> Cancel
                 </button>
                 {% endif %}
             </div>
         </div>
         {% empty %}
         <div class="empty-state" style="grid-column: 1 / -1;">
-            <div class="empty-state-icon">🛸</div>
+            <div class="empty-state-icon"><i data-lucide="box" class="empty-state-icon-svg" style="width:48px;height:48px;stroke-width:1.5;margin:0 auto;"></i></div>
             <h2 class="empty-state-title">No Projects Yet</h2>
             <p class="empty-state-desc">
                 Create your first project to start converting drone footage
@@ -179,6 +179,38 @@
                     </div>
                 </div>
             </div>
+
+            <!-- AI Image Enhancement -->
+            <div class="form-group">
+                <label class="form-label">AI Image Enhancement</label>
+                <p style="font-size:0.78rem;color:var(--text-tertiary);margin-bottom:10px;">
+                    Pre-process images with AI to improve detail extraction and point cloud quality.
+                </p>
+                <div class="quality-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+                    <div class="quality-option">
+                        <input type="radio" name="enhance" id="enhance-off" value="off" checked>
+                        <label for="enhance-off">
+                            <span class="quality-label">Off</span>
+                            <span class="quality-desc">Original images</span>
+                        </label>
+                    </div>
+                    <div class="quality-option">
+                        <input type="radio" name="enhance" id="enhance-standard" value="standard">
+                        <label for="enhance-standard">
+                            <span class="quality-label"><i data-lucide="sparkles" class="inline-icon" style="width:16px;height:16px;margin-right:6px;"></i> Standard</span>
+                            <span class="quality-desc">Sharpen · Contrast · Denoise</span>
+                        </label>
+                    </div>
+                    <div class="quality-option">
+                        <input type="radio" name="enhance" id="enhance-superres" value="super_res">
+                        <label for="enhance-superres">
+                            <span class="quality-label"><i data-lucide="brain" class="inline-icon" style="width:16px;height:16px;margin-right:6px;"></i> Super Res</span>
+                            <span class="quality-desc">AI 2× upscale + enhance</span>
+                        </label>
+                    </div>
+                </div>
+                <p id="enhance-info" style="font-size:0.72rem;color:var(--text-tertiary);margin-top:6px;display:none;"></p>
+            </div>
             <div class="form-group">
                 <label class="form-label" for="approx-location-toggle">
                     Approximate Location <span style="font-weight:400;color:var(--text-tertiary);text-transform:none;letter-spacing:0;">(optional)</span>
@@ -205,7 +237,7 @@
                         </div>
                     </div>
                     <p style="font-size:0.72rem;color:var(--text-tertiary);margin-top:6px;">
-                        💡 Tip: Right-click on Google Maps and select "Copy coordinates" to get lat/lon.
+                        <i data-lucide="lightbulb" class="inline-icon" style="width:14px;height:14px;margin-right:4px;"></i> Tip: Right-click on Google Maps and select "Copy coordinates" to get lat/lon.
                     </p>
                 </div>
             </div>
@@ -213,19 +245,19 @@
             <!-- ═══ Advanced Configuration ═══ -->
             <div class="advanced-config">
                 <button type="button" class="advanced-toggle" id="advanced-toggle" onclick="toggleAdvancedConfig()">
-                    <span class="advanced-toggle-icon" id="advanced-toggle-icon">▶</span>
+                    <span class="advanced-toggle-icon" id="advanced-toggle-icon"><i data-lucide="chevron-right" class="inline-icon" style="width:16px;height:16px;"></i></span>
                     <span>Advanced Configuration</span>
                     <span class="advanced-toggle-hint">Fine-tune processing parameters</span>
                 </button>
                 <div class="advanced-body" id="advanced-body">
                     <p class="advanced-note">
-                        ⚙️ These override the quality preset defaults. Leave blank to use preset values.
+                        <i data-lucide="settings" class="inline-icon" style="width:16px;height:16px;margin-right:6px;"></i> These override the quality preset defaults. Leave blank to use preset values.
                     </p>
 
                     <!-- Feature Matching -->
                     <div class="advanced-section">
                         <div class="advanced-section-header">
-                            <span class="advanced-section-icon">🔍</span>
+                            <span class="advanced-section-icon"><i data-lucide="search" class="inline-icon" style="width:16px;height:16px;"></i></span>
                             <span>Feature Matching</span>
                         </div>
                         <div class="advanced-grid">
@@ -309,7 +341,7 @@
                     <!-- Mesh & Texturing -->
                     <div class="advanced-section">
                         <div class="advanced-section-header">
-                            <span class="advanced-section-icon">🔺</span>
+                            <span class="advanced-section-icon"><i data-lucide="triangle" class="inline-icon" style="width:16px;height:16px;"></i></span>
                             <span>Mesh & Texturing</span>
                         </div>
                         <div class="advanced-grid">
@@ -338,7 +370,7 @@
                     <!-- Outputs -->
                     <div class="advanced-section">
                         <div class="advanced-section-header">
-                            <span class="advanced-section-icon">📦</span>
+                            <span class="advanced-section-icon"><i data-lucide="package" class="inline-icon" style="width:16px;height:16px;"></i></span>
                             <span>Outputs</span>
                         </div>
                         <div class="advanced-grid">
@@ -408,7 +440,7 @@
         <div class="modal-body">
             <!-- Drop zone -->
             <div class="upload-zone" id="upload-zone">
-                <div class="upload-zone-icon">📡</div>
+                <div class="upload-zone-icon"><i data-lucide="satellite" style="width:48px;height:48px;stroke-width:1.5;margin-bottom:16px;"></i></div>
                 <div class="upload-zone-title">Drop drone files here</div>
                 <div class="upload-zone-subtitle">or click to browse</div>
                 <div class="upload-zone-formats">

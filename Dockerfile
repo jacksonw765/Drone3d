@@ -98,8 +98,15 @@ RUN mkdir -p /app/static/potree \
     && cp -r /opt/potree/libs /app/static/potree/libs
 
 # Create required directories
-RUN mkdir -p /app/media/uploads /app/media/outputs /app/data /app/staticfiles \
-    && chown -R drone3d:drone3d /app
+RUN mkdir -p /app/media/uploads /app/media/outputs /app/data /app/staticfiles
+
+# Download Real-ESRGAN ONNX model for AI super-resolution (~6MB)
+RUN mkdir -p /app/models \
+    && curl -fsSL -o /app/models/realesrgan-x2plus.onnx \
+       "https://huggingface.co/tidus2102/Real-ESRGAN/resolve/main/Real-ESRGAN_x2plus.onnx" \
+    || echo "Warning: Could not download ESRGAN model — super-res will be unavailable"
+
+RUN chown -R drone3d:drone3d /app
 
 # Entrypoint
 COPY entrypoint.sh /entrypoint.sh

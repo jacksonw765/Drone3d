@@ -13,12 +13,15 @@
     <!-- Preconnect for Google Fonts (only for development, vendored in production) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
     {% block nav %}
     <nav class="nav" id="main-nav">
         <a href="/" class="nav-brand">
-            <div class="nav-brand-icon">◈</div>
+            <div class="nav-brand-icon"><i data-lucide="hexagon"></i></div>
             <div>
                 <div class="nav-brand-text">DRONE3D</div>
                 <div class="nav-brand-tag">Geospatial Recon</div>
@@ -27,7 +30,7 @@
         <div class="nav-actions">
             {% if user.is_authenticated %}
             <div class="nav-user">
-                <span>⬡</span>
+                <i data-lucide="user" style="width:16px; height:16px; margin-right:4px;"></i>
                 <span>{{ user.username }}</span>
             </div>
             <a href="{% url 'processing:logout' %}" class="btn btn-ghost btn-sm">Logout</a>
@@ -47,7 +50,12 @@
         /* ── Toast System ─────────────────────────────── */
         function showToast(message, type = 'info', duration = 4000) {
             const container = document.getElementById('toast-container');
-            const icons = { success: '✓', error: '✕', warning: '⚠', info: 'ⓘ' };
+            const icons = { 
+                success: '<i data-lucide="check-circle" style="width:20px;height:20px;"></i>', 
+                error: '<i data-lucide="x-circle" style="width:20px;height:20px;"></i>', 
+                warning: '<i data-lucide="alert-triangle" style="width:20px;height:20px;"></i>', 
+                info: '<i data-lucide="info" style="width:20px;height:20px;"></i>' 
+            };
             const toast = document.createElement('div');
             toast.className = `toast toast-${type}`;
             toast.innerHTML = `
@@ -56,6 +64,8 @@
                 <button class="toast-close" onclick="this.parentElement.remove()">×</button>
             `;
             container.appendChild(toast);
+            lucide.createIcons();
+            
             setTimeout(() => {
                 toast.classList.add('toast-exit');
                 setTimeout(() => toast.remove(), 300);
@@ -108,5 +118,48 @@
     </script>
 
     {% block extra_js %}{% endblock %}
+
+    <script>
+        // Initialize Lucide icons on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            
+            // Debounced MutationObserver to render Lucide icons when
+            // dynamically injected by JS. Uses a debounce timer and a guard
+            // flag to prevent infinite loops (createIcons itself mutates DOM).
+            let iconTimer = null;
+            let isCreatingIcons = false;
+
+            const observer = new MutationObserver((mutations) => {
+                if (isCreatingIcons) return; // Skip mutations from our own createIcons
+
+                let shouldUpdate = false;
+                for (let mutation of mutations) {
+                    if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                        for (const node of mutation.addedNodes) {
+                            if (node.nodeType === 1) {
+                                if (node.hasAttribute && node.hasAttribute('data-lucide') ||
+                                    node.querySelector && node.querySelector('[data-lucide]')) {
+                                    shouldUpdate = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (shouldUpdate) break;
+                }
+                if (shouldUpdate) {
+                    clearTimeout(iconTimer);
+                    iconTimer = setTimeout(() => {
+                        isCreatingIcons = true;
+                        lucide.createIcons();
+                        isCreatingIcons = false;
+                    }, 100);
+                }
+            });
+            
+            observer.observe(document.body, { childList: true, subtree: true });
+        });
+    </script>
 </body>
 </html>

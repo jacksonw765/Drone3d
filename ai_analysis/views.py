@@ -249,8 +249,8 @@ def ai_status(request):
     """
     from .ollama_client import OllamaClient
 
-    client = OllamaClient()
-    health = client.health_check()
+    with OllamaClient() as client:
+        health = client.health_check()
 
     return JsonResponse({
         "ai_enabled": getattr(settings, "AI_ANALYSIS_ENABLED", True),

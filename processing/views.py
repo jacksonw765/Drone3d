@@ -13,6 +13,7 @@ from celery.result import AsyncResult
 from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 
@@ -43,12 +44,14 @@ def create_project(request):
         approx_lat = data.get("approx_latitude")
         approx_lon = data.get("approx_longitude")
         odm_overrides = data.get("odm_overrides")
+        enhance_mode = data.get("ai_enhance_mode", "off")
     except (json.JSONDecodeError, AttributeError):
         name = request.POST.get("name", "").strip()
         quality = request.POST.get("quality_preset", "medium")
         approx_lat = request.POST.get("approx_latitude")
         approx_lon = request.POST.get("approx_longitude")
         odm_overrides = None
+        enhance_mode = request.POST.get("ai_enhance_mode", "off")
 
     if not name:
         return JsonResponse({"error": "Project name is required"}, status=400)
@@ -75,13 +78,19 @@ def create_project(request):
         # Whitelist of allowed ODM option keys
         ALLOWED_ODM_KEYS = {
             "feature-quality", "matcher-type", "min-num-features",
-            "pc-quality", "depthmap-resolution", "resize-to",
-            "mesh-octree-depth", "use-3dmesh",
+            "pc-quality", "pc-filter", "depthmap-resolution", "resize-to",
+            "mesh-octree-depth", "mesh-size", "use-3dmesh",
+            "texturing-nadir-weight",
             "orthophoto-resolution", "dsm", "dtm", "skip-orthophoto",
         }
         for key, value in odm_overrides.items():
             if key in ALLOWED_ODM_KEYS:
                 validated_overrides[key] = value
+
+    # Validate enhancement mode
+    valid_enhance_modes = dict(DroneProject.EnhanceMode.choices)
+    if enhance_mode not in valid_enhance_modes:
+        enhance_mode = "off"
 
     project = DroneProject.objects.create(
         name=name,
@@ -89,6 +98,7 @@ def create_project(request):
         approx_latitude=parsed_lat,
         approx_longitude=parsed_lon,
         odm_options=validated_overrides if validated_overrides else {},
+        ai_enhance_mode=enhance_mode,
     )
 
     # Create upload directory
@@ -242,6 +252,34 @@ def project_status(request, project_id):
                 "suggestion": "Try re-running with a lower quality preset.",
             }
 
+    # Calculate elapsed/total processing time
+    elapsed_seconds = None
+    processing_duration = None
+    if project.processing_started_at:
+        if project.completed_at:
+            # Finished — show total duration
+            delta = project.completed_at - project.processing_started_at
+            elapsed_seconds = int(delta.total_seconds())
+        elif project.status in (
+            DroneProject.Status.PREPROCESSING,
+            DroneProject.Status.PROCESSING,
+            DroneProject.Status.ANALYZING,
+            DroneProject.Status.QUEUED,
+        ):
+            # Still running — live elapsed
+            delta = timezone.now() - project.processing_started_at
+            elapsed_seconds = int(delta.total_seconds())
+
+        if elapsed_seconds is not None:
+            hours, remainder = divmod(elapsed_seconds, 3600)
+            minutes, secs = divmod(remainder, 60)
+            if hours > 0:
+                processing_duration = f"{hours}h {minutes}m {secs}s"
+            elif minutes > 0:
+                processing_duration = f"{minutes}m {secs}s"
+            else:
+                processing_duration = f"{secs}s"
+
     data = {
         "id": str(project.id),
         "name": project.name,
@@ -254,9 +292,12 @@ def project_status(request, project_id):
         "error_message": error_message,
         "error_detail": error_detail,
         "file_counts": counts,
+        "processing_started_at": project.processing_started_at.isoformat() if project.processing_started_at else None,
         "created_at": project.created_at.isoformat(),
         "updated_at": project.updated_at.isoformat(),
         "completed_at": project.completed_at.isoformat() if project.completed_at else None,
+        "elapsed_seconds": elapsed_seconds,
+        "processing_duration": processing_duration,
         "has_orthophoto": bool(project.orthophoto_path),
         "has_pointcloud": bool(project.pointcloud_path),
         "has_mesh": bool(project.mesh_path),
@@ -406,7 +447,31 @@ def processing_logs(request, project_id):
                 pass
 
         except Exception as e:
-            logs = [f"Could not fetch logs: {str(e)}"]
+            err_msg = str(e)
+            # Task was cleaned up after completion or container restart
+            if "not found" in err_msg.lower() or "404" in err_msg:
+                if project.status in (DroneProject.Status.COMPLETED, DroneProject.Status.FAILED):
+                    logs = [
+                        "── Console output no longer available ──",
+                        "",
+                        f"The NodeODM task ({project.nodeodm_task_uuid}) was cleaned up after processing finished.",
+                        "This is normal — tasks are removed to free memory for other jobs.",
+                    ]
+                    if project.status == DroneProject.Status.COMPLETED:
+                        odm_status = "completed"
+                        odm_progress = 100
+                    else:
+                        odm_status = "failed"
+                else:
+                    logs = [f"NodeODM task not found. The processing node may have restarted."]
+            else:
+                logs = [f"Could not connect to NodeODM: {err_msg}"]
+    else:
+        # No NodeODM task was ever created (e.g., failed during preprocessing)
+        if project.status == DroneProject.Status.FAILED:
+            logs = ["Processing failed before reaching the reconstruction stage."]
+        elif project.status == DroneProject.Status.COMPLETED:
+            logs = ["Processing completed. No NodeODM console output was recorded."]
 
     # Build pipeline step summary
     steps = _build_pipeline_steps(project, odm_progress, odm_status)
@@ -453,11 +518,33 @@ def _build_pipeline_steps(project, odm_progress, odm_status):
             "status": "done" if progress > 2 else ("active" if status in ("preprocessing", "queued") else "pending"),
             "detail": "Detecting input type, extracting frames" if progress <= 2 else "Complete",
         },
-        {
-            "name": "Submit to NodeODM",
-            "status": "done" if progress > 5 else ("active" if progress >= 2 else "pending"),
-            "detail": "Uploading images to processing engine" if progress <= 5 else "Complete",
-        },
+    ]
+
+    # Insert AI Enhancement step if enabled
+    if project.ai_enhance_mode != "off":
+        enhance_label = "Super Resolution" if project.ai_enhance_mode == "super_res" else "Standard"
+        if 2 < progress <= 2.9:
+            enhance_detail = msg if msg else f"Enhancing images ({enhance_label})"
+            enhance_status = "active"
+        elif progress > 2.9:
+            enhance_detail = f"Enhanced ({enhance_label})"
+            enhance_status = "done"
+        else:
+            enhance_detail = f"{enhance_label} enhancement"
+            enhance_status = "pending"
+
+        steps.append({
+            "name": "🧠 AI Enhancement",
+            "status": enhance_status,
+            "detail": enhance_detail,
+        })
+
+    steps.append({
+        "name": "Submit to NodeODM",
+        "status": "done" if progress > 5 else ("active" if progress >= 2.9 or (progress >= 2 and project.ai_enhance_mode == "off") else "pending"),
+        "detail": "Uploading images to processing engine" if progress <= 5 else "Complete",
+    })
+    steps.extend([
         {
             "name": "3D Reconstruction",
             "status": "done" if progress > 85 else ("active" if progress >= 5 else "pending"),
@@ -475,7 +562,7 @@ def _build_pipeline_steps(project, odm_progress, odm_status):
                 "Complete" if progress > 98 else "Waiting"
             ),
         },
-    ]
+    ])
 
     if project.ai_analysis_enabled:
         steps.append({

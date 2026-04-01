@@ -35,7 +35,7 @@
         panelEl.innerHTML = `
             <div class="ai-panel-header">
                 <div class="ai-panel-title">
-                    <span class="ai-icon">🤖</span>
+                    <span class="ai-icon"><i data-lucide="bot" style="width:20px;height:20px;margin-right:8px;"></i></span>
                     <span>Scene Intelligence</span>
                 </div>
                 <button class="ai-panel-close" onclick="window.D3D_AI.togglePanel()" title="Close">✕</button>
@@ -43,7 +43,7 @@
 
             <div class="ai-chat-history" id="ai-chat-history">
                 <div class="ai-welcome">
-                    <div class="ai-welcome-icon">🛰️</div>
+                    <div class="ai-welcome-icon"><i data-lucide="satellite" class="inline-icon" style="width:16px;height:16px;"></i>️</div>
                     <h3>Scene Intelligence</h3>
                     <p>Ask questions about the reconstructed area using natural language.</p>
                     <div class="ai-suggestions">
@@ -78,6 +78,7 @@
     // ── Toggle panel visibility ────────────────────────
     function togglePanel() {
         if (!panelEl) createPanel();
+        if (!panelEl) return;
         panelEl.classList.toggle('open');
         if (panelEl.classList.contains('open') && inputEl) {
             inputEl.focus();
@@ -97,21 +98,23 @@
         if (isQuerying) return;
         isQuerying = true;
 
-        // Clear welcome if present
-        const welcome = chatHistoryEl.querySelector('.ai-welcome');
-        if (welcome) welcome.remove();
-
-        // Add user message
-        appendMessage('user', question);
-
-        // Show loading
-        const loadingId = appendMessage('ai', '<div class="ai-loading"><span></span><span></span><span></span></div>', true);
-
-        updateStatus('Analyzing...');
         const sendBtn = document.getElementById('ai-send-btn');
-        if (sendBtn) sendBtn.disabled = true;
+        let loadingId = null;
 
         try {
+            // Clear welcome if present
+            const welcome = chatHistoryEl?.querySelector('.ai-welcome');
+            if (welcome) welcome.remove();
+
+            // Add user message
+            appendMessage('user', question);
+
+            // Show loading
+            loadingId = appendMessage('ai', '<div class="ai-loading"><span></span><span></span><span></span></div>', true);
+
+            updateStatus('Analyzing...');
+            if (sendBtn) sendBtn.disabled = true;
+
             const csrfToken = getCsrfToken();
             const resp = await fetch(`/ai/query/${PROJECT_ID}/`, {
                 method: 'POST',
@@ -122,10 +125,14 @@
                 body: JSON.stringify({ question }),
             });
 
+            if (!resp.ok) {
+                throw new Error(`Server error (${resp.status})`);
+            }
+
             const data = await resp.json();
 
-            // Remove loading
             removeMessage(loadingId);
+            loadingId = null;
 
             if (data.error) {
                 appendMessage('ai', `<div class="ai-error">${escapeHtml(data.answer || data.error)}</div>`);
@@ -138,20 +145,24 @@
                 }
             }
         } catch (e) {
-            removeMessage(loadingId);
-            appendMessage('ai', `<div class="ai-error">Connection error. Is Ollama running?</div>`);
+            if (loadingId) removeMessage(loadingId);
+            try {
+                appendMessage('ai', `<div class="ai-error">Connection error: ${escapeHtml(e.message || 'Is Ollama running?')}</div>`);
+            } catch (_) { /* DOM may be unavailable — swallow to let finally run */ }
+        } finally {
+            isQuerying = false;
+            updateStatus('');
+            if (sendBtn) sendBtn.disabled = false;
+            if (inputEl) inputEl.focus();
         }
-
-        isQuerying = false;
-        updateStatus('');
-        if (sendBtn) sendBtn.disabled = false;
-        if (inputEl) inputEl.focus();
     }
 
     // ── Message rendering ──────────────────────────────
     let msgCounter = 0;
 
     function appendMessage(role, content, isRaw = false) {
+        if (!chatHistoryEl) return null;
+
         const id = `msg-${++msgCounter}`;
         const div = document.createElement('div');
         div.className = `ai-message ai-message-${role}`;
@@ -246,7 +257,7 @@
         btn.className = 'viewer-toolbar-btn';
         btn.id = 'btn-ai-query';
         btn.title = 'AI Intelligence Query';
-        btn.textContent = '🤖';
+        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>';
         btn.onclick = togglePanel;
 
         // Insert before the last buttons (settings, fullscreen)

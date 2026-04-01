@@ -22,20 +22,26 @@ logger = logging.getLogger("ai_analysis")
 class TileAnalyzer:
     """Slices orthophotos and runs AI analysis on each tile."""
 
-    ANALYSIS_PROMPT = """You are a tactical imagery analyst examining an
-aerial orthophoto tile from a drone survey. Analyze this image and identify
-all significant features.
+    ANALYSIS_PROMPT = """Analyze this aerial/drone image using color and context cues to detect objects.
 
-For each feature found, provide:
-- label: descriptive name (e.g., "Two-story residential building")
-- category: one of [structure, vehicle, road, landing_zone, obstacle,
-  vegetation, water, cleared_area, defensive_position, antenna_tower]
-- relative_position: [x, y] as fraction of image (0.0-1.0 from top-left)
-- confidence: 0.0-1.0
-- description: brief tactical description
-- size_estimate: approximate size in meters if determinable
+DETECTION STRATEGY — look for objects by identifying:
+- Color contrast boundaries: where surface color changes sharply (e.g. gray roof vs green grass, dark asphalt vs light dirt)
+- Texture transitions: smooth vs rough, uniform vs patterned
+- Shadow patterns: shadows cast by elevated objects reveal structures, vehicles, poles
+- Geometric regularity: rectangular outlines = buildings, linear features = roads/fences
+- Color anomalies: objects that stand out from surrounding terrain (vehicle on road, equipment on grass)
 
-Respond as a JSON array. If no significant features, return []."""
+For each detected object provide:
+  label, category (structure/vehicle/road/obstacle/poi/vegetation),
+  relative_position [x,y] as 0-1 fraction from top-left,
+  confidence 0-1,
+  color_context (max 10 words describing the color/texture that distinguishes it),
+  description (max 15 words).
+
+JSON array only. Example:
+[{"label":"Building","category":"structure","relative_position":[0.3,0.5],"confidence":0.9,"color_context":"gray rectangle against green grass","description":"Two-story flat-roof building with parking area"}]
+
+If nothing notable, return []."""
 
     def __init__(self, client):
         self.client = client
@@ -43,8 +49,8 @@ Respond as a JSON array. If no significant features, return []."""
     def slice_orthophoto(
         self,
         geotiff_path: str,
-        tile_size: int = 512,
-        overlap: float = 0.15,
+        tile_size: int = 768,
+        overlap: float = 0.10,
     ) -> list[dict]:
         """Slice a GeoTIFF into georeferenced tiles for analysis.
 
@@ -146,7 +152,7 @@ Respond as a JSON array. If no significant features, return []."""
         try:
             result = self.client.structured_output(
                 prompt=self.ANALYSIS_PROMPT,
-                schema_hint='[{"label":"...","category":"...","relative_position":[x,y],"confidence":0.0}]',
+                schema_hint='[{"label":"...","category":"...","relative_position":[x,y],"confidence":0.0,"color_context":"...","description":"..."}]',
                 images=[tile["image_b64"]],
             )
         except (json.JSONDecodeError, Exception) as e:
@@ -160,6 +166,9 @@ Respond as a JSON array. If no significant features, return []."""
         bounds = tile["bounds"]
 
         for det in result:
+            # Skip non-dict items (model sometimes returns floats/strings)
+            if not isinstance(det, dict):
+                continue
             pos = det.get("relative_position", [0.5, 0.5])
             if not isinstance(pos, (list, tuple)) or len(pos) < 2:
                 pos = [0.5, 0.5]
@@ -185,6 +194,7 @@ Respond as a JSON array. If no significant features, return []."""
                 "confidence": confidence,
                 "metadata": {
                     "description": str(det.get("description", "")),
+                    "color_context": str(det.get("color_context", "")),
                     "size_estimate": str(det.get("size_estimate", "")),
                 },
             })

@@ -30,20 +30,21 @@ SRT_EXTENSIONS = {".srt"}
 
 # ── Target frame counts by quality preset ───────────────────
 # These are the ideal number of frames for a video reconstruction.
-# A 5-second 4K timelapse needs far more than 5 frames.
+# More frames = better coverage and overlap, especially for complex
+# scenes with buildings and varying geometry.
 VIDEO_TARGET_FRAMES = {
-    "low": 30,
-    "medium": 60,
-    "high": 90,
-    "ultra": 120,
+    "low": 50,
+    "medium": 100,
+    "high": 200,
+    "ultra": 300,
 }
 
 # Minimum FPS to extract — ensures we don't under-sample even for long videos
 MIN_EXTRACT_FPS = 2.0
-# Maximum FPS to extract — avoids near-duplicate frames from high-FPS sources
-MAX_EXTRACT_FPS = 10.0
-# Fraction of blurriest frames to discard
-BLUR_DISCARD_RATIO = 0.20
+# Maximum FPS to extract — higher cap allows denser sampling for short videos
+MAX_EXTRACT_FPS = 15.0
+# Fraction of blurriest frames to discard (keep more frames for better coverage)
+BLUR_DISCARD_RATIO = 0.15
 
 
 class InputDetector:
@@ -97,7 +98,7 @@ class VideoProbe:
         Probe a video file and return metadata.
 
         Returns:
-            dict with keys: duration, fps, width, height, codec, bitrate
+            dict with keys: duration, fps, width, height, codec, bitrate, rotation
         """
         cmd = [
             "ffprobe",
@@ -105,6 +106,7 @@ class VideoProbe:
             "-print_format", "json",
             "-show_format",
             "-show_streams",
+            "-show_entries", "stream_side_data",
             video_path,
         ]
 
@@ -151,6 +153,41 @@ class VideoProbe:
                 except ValueError:
                     pass
 
+        # ── Extract rotation metadata ──────────────────────
+        # Rotation can be stored in multiple places:
+        #   1. stream tags:  tags.rotate = "90"
+        #   2. side_data_list: display matrix with rotation field
+        rotation = 0
+
+        # Method 1: Check stream tags (older containers / MOV/MP4)
+        tags = video_stream.get("tags", {})
+        if "rotate" in tags:
+            try:
+                rotation = int(float(tags["rotate"]))
+            except (ValueError, TypeError):
+                pass
+
+        # Method 2: Check side_data_list for display matrix (newer ffprobe)
+        # NOTE: display matrix rotation is the INVERSE of tags.rotate.
+        # e.g. tags.rotate=90 == display_matrix.rotation=-90
+        # Both mean "rotate 90° CW to display correctly".
+        # We negate the display matrix value to unify the convention.
+        if rotation == 0:
+            for sd in video_stream.get("side_data_list", []):
+                if sd.get("side_data_type") == "Display Matrix":
+                    rot_val = sd.get("rotation")
+                    if rot_val is not None:
+                        try:
+                            rotation = -int(float(rot_val))
+                        except (ValueError, TypeError):
+                            pass
+                    break
+
+        # Normalize rotation to 0, 90, 180, 270
+        rotation = rotation % 360
+        if rotation < 0:
+            rotation += 360
+
         info = {
             "duration": duration,
             "fps": fps,
@@ -159,12 +196,13 @@ class VideoProbe:
             "codec": video_stream.get("codec_name", "unknown"),
             "total_frames": int(duration * fps) if duration and fps else 0,
             "bitrate": int(data.get("format", {}).get("bit_rate", 0)),
+            "rotation": rotation,
         }
 
         logger.info(
             f"Video probe: {info['width']}x{info['height']} @ {info['fps']:.1f}fps, "
             f"{info['duration']:.1f}s, ~{info['total_frames']} frames, "
-            f"codec={info['codec']}"
+            f"codec={info['codec']}, rotation={info['rotation']}°"
         )
         return info
 
@@ -454,16 +492,50 @@ class VideoPreprocessor:
         # ── Step 3: Extract at full resolution ──
         # No scale filter — preserve native 4K resolution.
         # ODM's resize-to parameter handles downscaling appropriately.
-        cmd = [
-            "ffmpeg",
+        #
+        # Handle video rotation metadata:
+        # Many drone/phone MP4s store rotation in container metadata
+        # (tags.rotate or display matrix). By default ffmpeg auto-rotates,
+        # but to be explicit and avoid issues across ffmpeg versions,
+        # we build the filter chain to include transpose when needed.
+        rotation = probe.get("rotation", 0)
+        vf_filters = [f"fps={extract_fps}"]
+
+        if rotation == 90:
+            # Rotate 90° clockwise
+            vf_filters.append("transpose=1")
+            logger.info("Applying 90° clockwise rotation to extracted frames")
+        elif rotation == 180:
+            # Rotate 180°
+            vf_filters.append("transpose=1,transpose=1")
+            logger.info("Applying 180° rotation to extracted frames")
+        elif rotation == 270:
+            # Rotate 90° counter-clockwise
+            vf_filters.append("transpose=2")
+            logger.info("Applying 270° (90° CCW) rotation to extracted frames")
+        elif rotation != 0:
+            # Non-standard rotation — let ffmpeg's autorotate handle it
+            logger.info(f"Non-standard rotation {rotation}°, relying on ffmpeg autorotate")
+
+        vf_string = ",".join(vf_filters)
+
+        # Only disable autorotate when we handle rotation explicitly via
+        # transpose filters. For 0° or non-standard angles, let ffmpeg
+        # auto-rotate normally.
+        use_noautorotate = rotation in (90, 180, 270)
+
+        cmd = ["ffmpeg"]
+        if use_noautorotate:
+            cmd.append("-noautorotate")
+        cmd.extend([
             "-i", video_path,
-            "-vf", f"fps={extract_fps}",
+            "-vf", vf_string,
             "-vframes", str(effective_max),
             "-q:v", "1",  # Highest quality JPEG (1 = best)
             "-qmin", "1",
             "-y",  # Overwrite existing
             os.path.join(output_dir, "frame_%05d.jpg"),
-        ]
+        ])
 
         logger.info(f"Extracting frames: {' '.join(cmd)}")
 
